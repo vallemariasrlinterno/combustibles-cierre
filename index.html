@@ -172,6 +172,7 @@ async function fbLoad(docName, base){
     <div class="card">
       <div class="section-title"><i class="ti ti-currency-dollar"></i> Precio por litro</div>
       <div class="precio-row" id="precios-wrap"></div>
+      <div id="avisos-precios-wrap"></div>
       <div style="text-align:right"><button class="btn btn-sm btn-primary" onclick="guardarPrecios()"><i class="ti ti-device-floppy"></i> Guardar precios</button></div>
     </div>
 
@@ -437,10 +438,44 @@ function onPrecioBlur(prod, el){
   else { el.value=''; el.classList.add('campo-vacio'); el.classList.remove('campo-cargado'); }
   guardarDraft();
   renderTotales();
+  renderAvisosPrecios();
 }
 function toggleKeroseno(){
   kerosenoDesbloqueado = !kerosenoDesbloqueado;
   renderOperador();
+}
+
+// Diferencia de precio sospechosa vs. el turno anterior (posible error de tipeo)
+const DIFERENCIA_PRECIO_SOSPECHOSA = 100; // $ por litro, ajustable
+function buscarPrecioTurnoAnterior(producto){
+  let n = T.num-1, intentos=0;
+  while(n>=P0 && intentos<9){
+    const c = turnosCerrados[`T${n}`];
+    if(c && c.precios && c.precios[producto]>0) return {valor:c.precios[producto], planilla:n};
+    n--; intentos++;
+  }
+  return null;
+}
+function detectarAdvertenciasPrecios(){
+  const avisos=[];
+  PRODUCTOS.forEach(p=>{
+    if(p==='Kerosene') return; // no se comercializa
+    const actual = precios[p]||0;
+    if(actual<=0) return;
+    const prev = buscarPrecioTurnoAnterior(p);
+    if(prev && Math.abs(actual-prev.valor) > DIFERENCIA_PRECIO_SOSPECHOSA){
+      const diff = actual-prev.valor;
+      const signo = diff>0?'+':'';
+      avisos.push(`<strong>${p}</strong>: pasó de $${prev.valor.toLocaleString('es-AR')} (planilla ${pStr(prev.planilla)}) a $${actual.toLocaleString('es-AR')} (${signo}${diff.toLocaleString('es-AR')}). Revisá que no sea un error de tipeo — si es un aumento real, podés ignorar este aviso.`);
+    }
+  });
+  return avisos;
+}
+function renderAvisosPrecios(){
+  const el = document.getElementById('avisos-precios-wrap');
+  if(!el) return;
+  const avisos = detectarAdvertenciasPrecios();
+  el.innerHTML = avisos.map(t=>`<div class="aviso-box aviso-warning"><i class="ti ti-alert-triangle"></i><span>${t}</span></div>`).join('');
 }
 
 // ═══════════════════════════════════════════════════
@@ -540,6 +575,7 @@ function renderOperador(){
       ${esKerosene && !cerrado ? `<button class="btn btn-sm" style="margin-top:6px;width:100%" onclick="toggleKeroseno()"><i class="ti ti-${kerosenoDesbloqueado?'lock-open':'lock'}"></i> ${kerosenoDesbloqueado?'Bloquear':'Editar'}</button>` : ''}
     </div>`;
   }).join('');
+  renderAvisosPrecios();
 
   // Mediciones agrupadas por surtidor y por cara, con separador visual entre caras
   let html='';
