@@ -338,6 +338,22 @@ function planillasDia(fk){
     k:planillaNum(diff,ti)?`T${planillaNum(diff,ti)}`:null
   }));
 }
+// Devuelve el jueves (YYYY-MM-DD) que inicia la semana que contiene a fk
+function weekStartFk(fk){
+  const d = new Date(fk+'T12:00:00');
+  const dow = d.getDay();
+  const back = (dow - 4 + 7) % 7;
+  d.setDate(d.getDate() - back);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+// Convierte "10/7/2026" a "2026-07-10" (fallback para turnos cerrados antes de guardar fk)
+function fechaAFk(fechaStr){
+  if(!fechaStr) return null;
+  const p=fechaStr.split('/');
+  if(p.length!==3) return null;
+  return `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
+}
+function tiFromNombre(nombre){ return nombre==='mañana'?0:nombre==='tarde'?1:2; }
 
 const T = turnoActual(); // calculado una vez al cargar
 
@@ -849,7 +865,7 @@ async function cerrarTurno(){
   const {porProducto, totalCombustibles, totalPagos, diferencia} = calcularTotales();
   const cerrados = await fbLoad('turnosCerrados') || {};
   cerrados[`T${T.num}`] = {
-    planilla:T.num, fecha:T.fecha, turno:T.nombre, cerradoPor:currentUser.name, hora:ahoraAR().hhmm,
+    planilla:T.num, fecha:T.fecha, fk:T.fk, turno:T.nombre, cerradoPor:currentUser.name, hora:ahoraAR().hhmm,
     mediciones, precios: {...precios}, pagos: {...pagos}, cuentaCorriente: [...cuentaCorriente], porProducto, totalCombustibles, totalPagos, diferencia
   };
   await fbSave('turnosCerrados', cerrados);
@@ -864,6 +880,8 @@ async function cerrarTurno(){
 // ═══════════════════════════════════════════════════
 let admSection='resumen';
 let admFk=null; // fecha que se está mirando en Resumen (null = hoy)
+let rptDesde=null, rptHasta=null, rptTurnoDesde=0, rptTurnoHasta=2, rptMostrar=false;
+let rptMetrica='pesos', rptProducto='Todos';
 function showAdm(sec, el){
   admSection=sec;
   document.querySelectorAll('#screen-admin .tab').forEach(t=>t.classList.remove('active'));
@@ -942,8 +960,9 @@ async function renderAdmContent(){
   } else if(admSection==='turnos'){
     const cerrados = await fbLoad('turnosCerrados') || {};
     const lista = Object.values(cerrados).sort((a,b)=>b.planilla-a.planilla);
-    el.innerHTML = `<div class="card"><div class="table-wrap"><table><thead><tr><th>Planilla</th><th>Fecha</th><th>Turno</th><th>Cerró</th><th>Hora</th><th>Combustibles</th><th>Pagos</th><th>Diferencia</th><th></th></tr></thead><tbody>
-      ${lista.map(c=>`<tr><td>${pStr(c.planilla)}</td><td>${c.fecha}</td><td><span class="badge badge-${c.turno}">${c.turno}</span></td><td>${c.cerradoPor}</td><td>${c.hora}</td><td>$${c.totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td>$${c.totalPagos.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td class="${Math.abs(c.diferencia)<1?'diff-ok':'diff-bad'}">$${c.diferencia.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td><button class="btn btn-sm" onclick="imprimirTurno(${c.planilla})"><i class="ti ti-file-download"></i> PDF</button></td></tr>`).join('') || '<tr><td colspan="9" style="text-align:center;color:#9ca3af">Sin turnos cerrados todavía</td></tr>'}
+    el.innerHTML = renderReporteRango(cerrados) +
+      `<div class="card"><div class="section-title"><i class="ti ti-clock"></i> Turnos cerrados</div><div class="table-wrap"><table><thead><tr><th>Planilla</th><th>Fecha</th><th>Turno</th><th>Cerró</th><th>Hora</th><th>Combustibles</th><th>Pagos</th><th>Diferencia</th><th></th></tr></thead><tbody>
+      ${lista.map(c=>`<tr><td>${pStr(c.planilla)}</td><td>${c.fecha}</td><td><span class="badge badge-${c.turno}">${c.turno}</span></td><td>${c.cerradoPor}</td><td>${c.hora}</td><td>$${c.totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td>$${c.totalPagos.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td class="${c.diferencia<0?'diff-bad':'diff-ok'}">${c.diferencia<0?'-':c.diferencia>0?'+':''}$${Math.abs(c.diferencia).toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td><button class="btn btn-sm" onclick="imprimirTurno(${c.planilla})"><i class="ti ti-file-download"></i> PDF</button></td></tr>`).join('') || '<tr><td colspan="9" style="text-align:center;color:#9ca3af">Sin turnos cerrados todavía</td></tr>'}
     </tbody></table></div></div>`;
   } else if(admSection==='usuarios'){
     const [b, passesData] = await Promise.all([ fbLoad('bloqueados'), fbLoad('passes', FB_BASE_NOCHERO) ]);
@@ -1044,6 +1063,177 @@ function imprimirTurno(numPlanilla){
     </body></html>`);
   win.document.close();
   setTimeout(()=>win.print(), 400);
+}
+
+function generarReporte(){
+  rptDesde = document.getElementById('rpt-desde')?.value || T.fk;
+  rptHasta = document.getElementById('rpt-hasta')?.value || T.fk;
+  rptTurnoDesde = parseInt(document.getElementById('rpt-turno-desde')?.value) || 0;
+  rptTurnoHasta = parseInt(document.getElementById('rpt-turno-hasta')?.value) || 2;
+  rptMostrar = true;
+  renderAdmContent();
+}
+function setRptMetrica(m){ rptMetrica=m; renderAdmContent(); }
+function setRptProducto(p){ rptProducto=p; renderAdmContent(); }
+
+// Gráfico de barras: total vendido por semana (jueves a jueves)
+function buildGraficoSemanal(turnosRango){
+  const semanas = {}; // jueves(YYYY-MM-DD) -> valor acumulado
+  for(const c of turnosRango){
+    const fk = c.fk || fechaAFk(c.fecha);
+    if(!fk) continue;
+    const ws = weekStartFk(fk);
+    if(!(ws in semanas)) semanas[ws] = 0;
+    (c.porProducto||[]).forEach(p=>{
+      if(rptProducto!=='Todos' && p.producto!==rptProducto) return;
+      semanas[ws] += rptMetrica==='litros' ? p.litros : p.importe;
+    });
+  }
+  const weeks = Object.keys(semanas).sort();
+  const fmt = (val)=> rptMetrica==='pesos' ? '$'+Math.round(val).toLocaleString('es-AR') : Math.round(val).toLocaleString('es-AR')+' L';
+  const fmtCorto = (val)=>{
+    if(rptMetrica!=='pesos') return Math.round(val).toLocaleString('es-AR');
+    if(val>=1000000) return '$'+(val/1000000).toFixed(1).replace('.0','')+'M';
+    if(val>=1000) return '$'+Math.round(val/1000)+'k';
+    return '$'+Math.round(val);
+  };
+  const btnMetrica = (val,txt)=>`<button class="btn btn-sm ${rptMetrica===val?'btn-primary':''}" onclick="setRptMetrica('${val}')">${txt}</button>`;
+  const optProd = ['Todos',...PRODUCTOS].map(pr=>`<option value="${pr}" ${rptProducto===pr?'selected':''}>${pr}</option>`).join('');
+  const controles = `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      ${btnMetrica('pesos','$ Pesos')}
+      ${btnMetrica('litros','Litros')}
+      <select onchange="setRptProducto(this.value)" style="width:auto;margin:0;padding:5px 8px;font-size:12px">${optProd}</select>
+    </div>`;
+
+  let cuerpo;
+  if(weeks.length===0){
+    cuerpo = `<div style="color:#9ca3af;font-size:13px;padding:2rem 0;text-align:center">Sin datos para graficar en este rango.</div>`;
+  } else {
+    const maxV = Math.max(...weeks.map(w=>semanas[w]), 1);
+    const H = 260, NT = 4;
+    let yAxis='', grid='';
+    for(let i=NT;i>=0;i--){
+      const val = maxV*i/NT;
+      const topPx = H - (H*i/NT);
+      yAxis += `<div style="position:absolute;top:${topPx}px;right:6px;transform:translateY(-50%);font-size:10px;color:#9ca3af;white-space:nowrap">${fmtCorto(val)}</div>`;
+      grid  += `<div style="position:absolute;left:0;right:0;top:${topPx}px;border-top:1px ${i===0?'solid #d1d5db':'dashed #eef1f5'}"></div>`;
+    }
+    const barras = weeks.map((w,i)=>{
+      const val = semanas[w];
+      const hPx = Math.max(4, Math.round(val/maxV*H));
+      const [,mm,dd] = w.split('-');
+      let deltaHtml = '<div style="height:16px"></div>';
+      if(i>0){
+        const prev = semanas[weeks[i-1]];
+        if(prev>0){
+          const chg = Math.round((val-prev)/prev*100);
+          const up = chg>=0;
+          deltaHtml = `<div style="font-size:10px;font-weight:800;color:${up?'#27500A':'#A32D2D'};background:${up?'#EAF3DE':'#FCEBEB'};padding:1px 6px;border-radius:999px;white-space:nowrap">${up?'▲':'▼'}${Math.abs(chg)}%</div>`;
+        }
+      }
+      return `<div style="flex:1;min-width:56px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;margin-bottom:6px">
+          ${deltaHtml}
+          <div style="font-size:12px;font-weight:700;color:#1a1a1a;white-space:nowrap">${fmt(val)}</div>
+        </div>
+        <div style="width:100%;display:flex;justify-content:center;align-items:flex-end;height:${H}px">
+          <div style="width:60%;max-width:60px;height:${hPx}px;background:linear-gradient(to top,#0C447C,#5aa0e6);border-radius:8px 8px 0 0;box-shadow:0 2px 6px rgba(12,68,124,.25)" title="Semana del ${parseInt(dd)}/${parseInt(mm)}: ${fmt(val)}"></div>
+        </div>
+      </div>`;
+    }).join('');
+    cuerpo = `<div style="display:flex;gap:6px">
+        <div style="position:relative;width:46px;height:${H}px;flex-shrink:0">${yAxis}</div>
+        <div style="position:relative;flex:1;overflow-x:auto">
+          <div style="position:absolute;left:0;right:0;top:0;height:${H}px;pointer-events:none">${grid}</div>
+          <div style="position:relative;display:flex;align-items:flex-end;gap:10px;min-width:min-content">${barras}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <div style="width:46px;flex-shrink:0"></div>
+        <div style="flex:1;display:flex;gap:10px;overflow-x:auto">
+          ${weeks.map(w=>{const[,mm,dd]=w.split('-');return `<div style="flex:1;min-width:56px;text-align:center;font-size:11px;color:#374151;font-weight:600">${parseInt(dd)}/${parseInt(mm)}</div>`;}).join('')}
+        </div>
+      </div>
+      <div style="font-size:10px;color:#9ca3af;text-align:center;margin-top:10px">Cada barra es una semana (jueves a jueves). El % compara con la semana anterior.</div>`;
+  }
+  return `<div style="margin-bottom:1.5rem;border:1px solid #e5e7eb;border-radius:12px;padding:1.25rem;background:#fff">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:1.25rem">
+      <strong style="font-size:14px"><i class="ti ti-chart-histogram"></i> Ventas por semana (jueves a jueves)</strong>
+      ${controles}
+    </div>
+    ${cuerpo}
+  </div>`;
+}
+
+function renderReporteRango(cerrados){
+  const items = Object.values(cerrados);
+  let resultHtml = '';
+  if(rptMostrar && rptDesde && rptHasta){
+    const turnosRango = items.filter(c=>{
+      const fk = c.fk || fechaAFk(c.fecha);
+      if(!fk) return false;
+      const diff1 = diffDiasFk(rptDesde, fk);
+      const diff2 = diffDiasFk(fk, rptHasta);
+      if(diff1<0||diff2<0) return false;
+      const ti = tiFromNombre(c.turno);
+      if(diff1===0 && ti < rptTurnoDesde) return false;
+      if(diff2===0 && ti > rptTurnoHasta) return false;
+      return true;
+    });
+    if(turnosRango.length===0){
+      resultHtml = `<div class="alert alert-info" style="margin-bottom:1rem"><i class="ti ti-info-circle"></i> No hay turnos cerrados en ese rango.</div>`;
+    } else {
+      const resumen = {};
+      PRODUCTOS.forEach(p=>resumen[p]={litros:0,importe:0});
+      let totalCombustibles=0;
+      turnosRango.forEach(c=>{
+        totalCombustibles += c.totalCombustibles||0;
+        (c.porProducto||[]).forEach(p=>{ resumen[p.producto].litros+=p.litros; resumen[p.producto].importe+=p.importe; });
+      });
+      const totalLitros = Object.values(resumen).reduce((s,p)=>s+p.litros,0);
+      resultHtml = `<div class="card" style="border:2px solid #185FA5">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+          <div class="section-title" style="margin:0"><i class="ti ti-chart-bar"></i> Reporte: ${fkDisplay(rptDesde)} → ${fkDisplay(rptHasta)}</div>
+          <div style="font-size:13px;color:#6b7280">${turnosRango.length} turno${turnosRango.length!==1?'s':''} · <strong>${totalLitros.toLocaleString('es-AR',{maximumFractionDigits:0})} L</strong> · <strong>$${totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</strong></div>
+        </div>
+        ${buildGraficoSemanal(turnosRango)}
+        <table style="width:100%;font-size:13px;border-collapse:collapse">
+          <thead><tr>
+            <th style="text-align:left;padding:5px 8px;color:#6b7280;font-weight:500;border-bottom:1px solid #e5e7eb;background:#f9fafb">Producto</th>
+            <th style="text-align:right;padding:5px 8px;color:#6b7280;font-weight:500;border-bottom:1px solid #e5e7eb;background:#f9fafb">Litros</th>
+            <th style="text-align:right;padding:5px 8px;color:#6b7280;font-weight:500;border-bottom:1px solid #e5e7eb;background:#f9fafb">Total</th>
+          </tr></thead><tbody>
+          ${Object.entries(resumen).filter(([,v])=>v.litros>0).sort((a,b)=>b[1].importe-a[1].importe).map(([prod,v])=>`<tr>
+            <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6"><span class="producto-dot" style="background:${PRODUCT_COLORS[prod]||'#6b7280'}"></span>${prod}</td>
+            <td style="padding:5px 8px;text-align:right;border-bottom:1px solid #f3f4f6">${v.litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td>
+            <td style="padding:5px 8px;text-align:right;border-bottom:1px solid #f3f4f6;font-weight:600">$${v.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</td>
+          </tr>`).join('') || '<tr><td colspan="3" style="text-align:center;color:#9ca3af;padding:1rem">Sin ventas</td></tr>'}
+          </tbody></table>
+      </div>`;
+    }
+  }
+  const hoy = T.fk;
+  return `<div class="card" style="margin-bottom:1rem">
+    <div class="section-title"><i class="ti ti-calendar-stats"></i> Reporte por rango de fechas</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div>
+        <label style="font-size:12px;color:#6b7280;margin-bottom:4px;display:block">Desde</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="date" id="rpt-desde" value="${rptDesde||hoy}" min="${FK_INICIO}" max="${hoy}" style="flex:1;margin:0;padding:7px 10px;font-size:13px">
+          <select id="rpt-turno-desde" style="width:100px;margin:0;padding:7px 6px;font-size:13px">${TURNOS.map((t,i)=>`<option value="${i}" ${i===rptTurnoDesde?'selected':''}>${t}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div>
+        <label style="font-size:12px;color:#6b7280;margin-bottom:4px;display:block">Hasta</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="date" id="rpt-hasta" value="${rptHasta||hoy}" min="${FK_INICIO}" max="${hoy}" style="flex:1;margin:0;padding:7px 10px;font-size:13px">
+          <select id="rpt-turno-hasta" style="width:100px;margin:0;padding:7px 6px;font-size:13px">${TURNOS.map((t,i)=>`<option value="${i}" ${i===rptTurnoHasta?'selected':''}>${t}</option>`).join('')}</select>
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="generarReporte()"><i class="ti ti-search"></i> Generar reporte</button>
+  </div>
+  ${resultHtml}`;
 }
 
 function reabrirTurno(k, num){
