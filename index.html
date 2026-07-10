@@ -544,8 +544,8 @@ function renderCuentaCorriente(cerrado){
       <div><label>Fecha</label><input type="date" id="cc-fecha" value="${T.fk}"></div>
       <div><label>Producto</label><select id="cc-producto">${PRODUCTOS.filter(p=>p!=='Kerosene').map(p=>`<option value="${p}">${p}</option>`).join('')}</select></div>
       <div><label>Cliente</label><input type="text" id="cc-cliente" placeholder="NOMBRE" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
-      <div><label>Litros</label><input type="number" step="0.1" id="cc-litros" placeholder="ej. 70"></div>
-      <div><label>Importe ($)</label><input type="number" step="0.01" id="cc-importe" placeholder="ej. 89250"></div>
+      <div><label>Litros</label><input type="number" step="0.1" id="cc-litros" placeholder="Ej: 70"></div>
+      <div><label>Importe ($)</label><input type="number" step="0.01" id="cc-importe" placeholder="Ej: 89.000"></div>
       <div><button class="btn btn-primary btn-block" onclick="agregarCuentaCorriente()"><i class="ti ti-plus"></i> Agregar</button></div>
     </div>`}
     <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Litros</th><th>Cliente</th><th>Producto</th><th>Importe</th><th></th></tr></thead><tbody>
