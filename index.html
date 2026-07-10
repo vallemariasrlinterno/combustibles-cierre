@@ -61,6 +61,8 @@ tr:last-child td{border-bottom:none}
 .cara-header-row td{background:#EFF3F8!important;color:#185FA5;font-weight:800;font-size:12px;padding:7px 12px!important;text-transform:uppercase;letter-spacing:.5px;border-top:3px solid #185FA5!important;border-bottom:1px solid #d7e6f5!important}
 .fila-cara-par{background:#fafbfc}
 .fila-cara-impar{background:#fff}
+.fila-inactiva{opacity:.5}
+.fila-inactiva td{color:#9ca3af!important}
 .medicion-input{width:100%;padding:7px 8px;font-size:13px;text-align:right}
 .litros-badge{font-weight:700;color:#27500A}
 .precio-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:.5rem}
@@ -331,7 +333,7 @@ let precios={}; // {producto:number}
 let mediciones=mediicionesVacias();
 let pagos={efectivo:null,tarjetaPlaya:null,tarjetaShop:null,pagosElectronicos:null,cheque:null,cuentaCorriente:0};
 let cuentaCorriente=[]; // {id,fecha,litros,cliente,producto,importe}
-let kerosenoDesbloqueado=false;
+let kerosenoActivo=false; // interruptor único: precio + Surtidor 4 (Cara 7/8). Persistente entre turnos.
 let turnosCerrados={};
 let bloqueados={eitan:true}; // default: Eitan bloqueado en esta app
 
@@ -388,12 +390,13 @@ function doLogout(){currentUser=null;showScreen('login');}
 // CARGA / GUARDADO DE ESTADO
 // ═══════════════════════════════════════════════════
 async function cargarEstadoTurno(){
-  const [cerrados, draft, preciosGuardados] = await Promise.all([
-    fbLoad('turnosCerrados'), fbLoad('draftActual'), fbLoad('precios')
+  const [cerrados, draft, preciosGuardados, kerosenoEstado] = await Promise.all([
+    fbLoad('turnosCerrados'), fbLoad('draftActual'), fbLoad('precios'), fbLoad('kerosenoEstado')
   ]);
   turnosCerrados = cerrados || {};
   if(preciosGuardados) precios = preciosGuardados;
   else PRODUCTOS.forEach(p=>precios[p]=precios[p]||0);
+  kerosenoActivo = !!(kerosenoEstado && kerosenoEstado.activo);
 
   const key=`T${T.num}`;
   if(turnosCerrados[key]){
@@ -440,8 +443,10 @@ function onPrecioBlur(prod, el){
   renderTotales();
   renderAvisosPrecios();
 }
-function toggleKeroseno(){
-  kerosenoDesbloqueado = !kerosenoDesbloqueado;
+async function toggleKeroseno(){
+  kerosenoActivo = !kerosenoActivo;
+  await fbSave('kerosenoEstado', {activo: kerosenoActivo});
+  toast(kerosenoActivo ? '✓ Kerosene activado' : '✓ Kerosene desactivado', 'success');
   renderOperador();
 }
 
@@ -459,7 +464,7 @@ function buscarPrecioTurnoAnterior(producto){
 function detectarAdvertenciasPrecios(){
   const avisos=[];
   PRODUCTOS.forEach(p=>{
-    if(p==='Kerosene') return; // no se comercializa
+    if(p==='Kerosene' && !kerosenoActivo) return; // inactivo, no se comercializa
     const actual = precios[p]||0;
     if(actual<=0) return;
     const prev = buscarPrecioTurnoAnterior(p);
@@ -563,7 +568,7 @@ function renderOperador(){
     const color = PRODUCT_COLORS[p]||'#6b7280';
     const filled = precios[p] && precios[p]>0;
     const esKerosene = p==='Kerosene';
-    const disabled = cerrado || (esKerosene && !kerosenoDesbloqueado);
+    const disabled = cerrado || (esKerosene && !kerosenoActivo);
     return `<div class="precio-box">
       <label style="color:${color};font-weight:700;font-size:14px"><span class="producto-dot" style="background:${color}"></span>${p}</label>
       <div class="precio-input-wrap">
@@ -572,7 +577,7 @@ function renderOperador(){
           placeholder="0.000" value="${filled?formatMiles(precios[p]):''}" ${disabled?'disabled':''}
           oninput="onPrecioInput(this)" onblur="onPrecioBlur('${p}',this)">
       </div>
-      ${esKerosene && !cerrado ? `<button class="btn btn-sm" style="margin-top:6px;width:100%" onclick="toggleKeroseno()"><i class="ti ti-${kerosenoDesbloqueado?'lock-open':'lock'}"></i> ${kerosenoDesbloqueado?'Bloquear':'Editar'}</button>` : ''}
+      ${esKerosene && !cerrado ? `<button class="btn btn-sm" style="margin-top:6px;width:100%;${kerosenoActivo?'background:#EAF3DE;border-color:#3B6D11;color:#27500A':''}" onclick="toggleKeroseno()"><i class="ti ti-${kerosenoActivo?'toggle-right':'toggle-left'}"></i> Kerosene ${kerosenoActivo?'ACTIVO — tocá para desactivar':'inactivo — tocá para activar'}</button>` : ''}
     </div>`;
   }).join('');
   renderAvisosPrecios();
@@ -586,7 +591,9 @@ function renderOperador(){
       if(surActual!==null) html+='</tbody></table></div></div>';
       surActual=p.surtidor;
       caraActual=null;
-      html+=`<div class="surtidor-group"><div class="surtidor-title"><i class="ti ti-gas-station"></i> Surtidor ${p.surtidor}</div><div class="table-wrap"><table>
+      const esSurtidorKerosene = p.producto==='Kerosene';
+      const badgeKerosene = esSurtidorKerosene ? `<span class="badge ${kerosenoActivo?'badge-ok':'badge-out'}" style="margin-left:auto;font-size:11px">${kerosenoActivo?'ACTIVO':'INACTIVO'}</span>${!cerrado?`<button class="btn btn-sm" style="background:#fff" onclick="toggleKeroseno()"><i class="ti ti-${kerosenoActivo?'toggle-right':'toggle-left'}"></i> ${kerosenoActivo?'Desactivar':'Activar'}</button>`:''}` : '';
+      html+=`<div class="surtidor-group"><div class="surtidor-title"><i class="ti ti-gas-station"></i> Surtidor ${p.surtidor}${badgeKerosene}</div><div class="table-wrap"><table>
         <thead><tr><th>Pico</th><th>Producto</th><th>Inicial</th><th>Final</th><th>Litros</th></tr></thead><tbody>`;
     }
     if(p.cara!==caraActual){
@@ -594,18 +601,21 @@ function renderOperador(){
       html+=`<tr class="cara-header-row"><td colspan="5"><i class="ti ti-corner-down-right"></i> Cara ${p.cara}</td></tr>`;
     }
     const m = mediciones.find(x=>x.pico===p.pico);
-    const litros = (m.final!=null && m.inicial!=null) ? Math.max(0,(m.final-m.inicial)) : 0;
+    const esKerosenePico = p.producto==='Kerosene';
+    const inactivo = esKerosenePico && !kerosenoActivo;
+    const litros = (!inactivo && m.final!=null && m.inicial!=null) ? Math.max(0,(m.final-m.inicial)) : 0;
     const color = PRODUCT_COLORS[p.producto]||'#6b7280';
-    const filaClass = p.cara%2===0 ? 'fila-cara-par' : 'fila-cara-impar';
-    const hayError = (m.inicial!=null && m.final!=null && m.final<m.inicial);
+    const filaClass = (p.cara%2===0 ? 'fila-cara-par' : 'fila-cara-impar') + (inactivo ? ' fila-inactiva' : '');
+    const hayError = (!inactivo && m.inicial!=null && m.final!=null && m.final<m.inicial);
     const inicialClass = hayError ? 'campo-error' : (m.inicial!=null?'campo-cargado':'campo-vacio');
     const finalClass = hayError ? 'campo-error' : (m.final!=null?'campo-cargado':'campo-vacio');
+    const disabledInput = cerrado || inactivo;
     html+=`<tr class="${filaClass}">
       <td><strong>Pico ${p.pico}</strong></td>
       <td style="border-left:4px solid ${color}"><span class="producto-dot" style="background:${color}"></span><span style="color:${color};font-weight:600">${p.producto}</span></td>
-      <td><input class="medicion-input ${inicialClass}" type="number" step="0.1" placeholder="000000" value="${m.inicial??''}" ${cerrado?'disabled':''} onchange="actualizarMedicion('${m.id}','inicial',this.value)"></td>
-      <td><input class="medicion-input ${finalClass}" type="number" step="0.1" placeholder="000000" value="${m.final??''}" ${cerrado?'disabled':''} onchange="actualizarMedicion('${m.id}','final',this.value)"></td>
-      <td class="litros-badge">${litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td>
+      <td><input class="medicion-input ${inicialClass}" type="number" step="0.1" placeholder="000000" value="${inactivo?'':(m.inicial??'')}" ${disabledInput?'disabled':''} onchange="actualizarMedicion('${m.id}','inicial',this.value)"></td>
+      <td><input class="medicion-input ${finalClass}" type="number" step="0.1" placeholder="000000" value="${inactivo?'':(m.final??'')}" ${disabledInput?'disabled':''} onchange="actualizarMedicion('${m.id}','final',this.value)"></td>
+      <td class="litros-badge">${inactivo?'—':litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td>
     </tr>`;
   });
   html+='</tbody></table></div></div>';
@@ -652,6 +662,7 @@ const LITROS_SOSPECHOSOS = 10000; // umbral por pico por turno, ajustable
 function detectarAdvertenciasMediciones(){
   const avisos=[];
   PICOS.forEach(p=>{
+    if(p.producto==='Kerosene' && !kerosenoActivo) return; // inactivo, no genera avisos
     const m = mediciones.find(x=>x.pico===p.pico);
     if(m.inicial!=null && m.final!=null){
       if(m.final < m.inicial){
@@ -695,6 +706,7 @@ function actualizarPago(id, val){
 
 function calcularTotales(){
   const porProducto = PRODUCTOS.map(prod=>{
+    if(prod==='Kerosene' && !kerosenoActivo) return {producto:prod, litros:0, importe:0};
     const litros = mediciones.filter(m=>m.producto===prod)
       .reduce((s,m)=> s + ((m.final!=null && m.inicial!=null) ? Math.max(0,m.final-m.inicial) : 0), 0);
     const precio = precios[prod]||0;
@@ -723,11 +735,11 @@ function renderTotales(){
 function validarCierre(){
   const errores=[];
   PRODUCTOS.forEach(p=>{
-    if(p==='Kerosene') return; // excepción: no se comercializa
+    if(p==='Kerosene' && !kerosenoActivo) return; // excepción: inactivo, no se comercializa
     if(!precios[p] || precios[p]<=0) errores.push(`Falta el precio de <strong>${p}</strong>`);
   });
   PICOS.forEach(p=>{
-    if(p.producto==='Kerosene') return; // excepción
+    if(p.producto==='Kerosene' && !kerosenoActivo) return; // excepción: inactivo
     const m = mediciones.find(x=>x.pico===p.pico);
     if(m.inicial==null || m.final==null) errores.push(`Falta cargar el Pico ${p.pico} — ${p.producto} (Surtidor ${p.surtidor}, Cara ${p.cara})`);
     else if(m.final < m.inicial) errores.push(`Pico ${p.pico} — ${p.producto}: el Final no puede ser menor al Inicial`);
