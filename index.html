@@ -450,6 +450,29 @@ function onPrecioBlur(prod, el){
   renderTotales();
   renderAvisosPrecios();
 }
+// Litros en Cuenta Corriente: sí admite decimales, con COMA como separador (ej. 21,82)
+function onLitrosInput(el){
+  let v = el.value.replace(/[^0-9,]/g,'');
+  const partes = v.split(',');
+  if(partes.length>2) v = partes[0]+','+partes.slice(1).join('');
+  const p2 = v.split(',');
+  if(p2[1]!==undefined && p2[1].length>2) v = p2[0]+','+p2[1].slice(0,2);
+  el.value = v;
+}
+function parseLitrosValor(el){
+  const v = el.value.replace(/[^0-9,]/g,'');
+  if(v==='') return null;
+  const [ent, dec] = v.split(',');
+  const entero = ent ? parseInt(ent,10) : 0;
+  const decimal = dec ? parseFloat('0.'+dec) : 0;
+  return entero + decimal;
+}
+function formatearLitrosBlur(el){
+  const n = parseLitrosValor(el);
+  if(n!=null && n>0){ el.value = n.toLocaleString('es-AR',{maximumFractionDigits:2}); el.classList.remove('campo-vacio'); el.classList.add('campo-cargado'); }
+  else { el.value=''; el.classList.add('campo-vacio'); el.classList.remove('campo-cargado'); }
+}
+
 async function toggleKeroseno(){
   kerosenoActivo = !kerosenoActivo;
   await fbSave('kerosenoEstado', {activo: kerosenoActivo});
@@ -500,9 +523,9 @@ function agregarCuentaCorriente(){
   const fecha = document.getElementById('cc-fecha').value || T.fk;
   const cliente = document.getElementById('cc-cliente').value.trim().toUpperCase();
   const producto = document.getElementById('cc-producto').value;
-  const litrosDigitos = document.getElementById('cc-litros').value.replace(/[^0-9]/g,'');
+  const litros0 = parseLitrosValor(document.getElementById('cc-litros'));
   const importeDigitos = document.getElementById('cc-importe').value.replace(/[^0-9]/g,'');
-  let litros = litrosDigitos!==''? parseInt(litrosDigitos,10) : null;
+  let litros = litros0;
   let importe = importeDigitos!==''? parseInt(importeDigitos,10) : null;
 
   if(!fecha || !cliente || !producto){
@@ -538,7 +561,7 @@ function eliminarCuentaCorriente(id){
 function renderCuentaCorriente(cerrado){
   const filas = cuentaCorriente.map(r=>`<tr>
     <td>${r.fecha}</td>
-    <td style="text-align:right">${r.litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td>
+    <td style="text-align:right">${r.litros.toLocaleString('es-AR',{maximumFractionDigits:2})}</td>
     <td>${r.cliente}</td>
     <td><span class="producto-dot" style="background:${PRODUCT_COLORS[r.producto]||'#6b7280'}"></span>${r.producto}</td>
     <td style="text-align:right">$${r.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</td>
@@ -551,7 +574,7 @@ function renderCuentaCorriente(cerrado){
       <div><label>Fecha</label><input type="date" id="cc-fecha" value="${T.fk}"></div>
       <div><label>Producto</label><select id="cc-producto">${PRODUCTOS.filter(p=>p!=='Kerosene').map(p=>`<option value="${p}">${p}</option>`).join('')}</select></div>
       <div><label>Cliente</label><input type="text" id="cc-cliente" placeholder="NOMBRE" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
-      <div><label>Litros</label><input type="text" inputmode="numeric" id="cc-litros" placeholder="Ej: 70" oninput="onMilesInput(this)" onblur="if(this.value)this.value=formatMiles(parseInt(this.value,10))"></div>
+      <div><label>Litros</label><input type="text" inputmode="decimal" id="cc-litros" placeholder="Ej: 21,82" oninput="onLitrosInput(this)" onblur="formatearLitrosBlur(this)"></div>
       <div><label>Importe ($)</label><input type="text" inputmode="numeric" id="cc-importe" placeholder="Ej: 89.000" oninput="onMilesInput(this)" onblur="if(this.value)this.value=formatMiles(parseInt(this.value,10))"></div>
       <div><button class="btn btn-primary btn-block" onclick="agregarCuentaCorriente()"><i class="ti ti-plus"></i> Agregar</button></div>
     </div>`}
@@ -864,7 +887,7 @@ function imprimirTurno(numPlanilla){
   const filasProductos = c.porProducto.map(p=>`<tr><td>${p.producto}</td><td style="text-align:right">$${(c.precios[p.producto]||0).toLocaleString('es-AR')}</td><td style="text-align:right">${p.litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td><td style="text-align:right">$${p.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>`).join('');
   const filasPagos = MEDIOS_PAGO.map(m=>`<tr><td>${m.label}</td><td style="text-align:right">$${(c.pagos[m.id]||0).toLocaleString('es-AR')}</td></tr>`).join('');
   const cc = c.cuentaCorriente || [];
-  const filasCC = cc.map(r=>`<tr><td>${r.fecha}</td><td style="text-align:right">${r.litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td><td>${r.cliente}</td><td>${r.producto}</td><td style="text-align:right">$${r.importe.toLocaleString('es-AR')}</td></tr>`).join('');
+  const filasCC = cc.map(r=>`<tr><td>${r.fecha}</td><td style="text-align:right">${r.litros.toLocaleString('es-AR',{maximumFractionDigits:2})}</td><td>${r.cliente}</td><td>${r.producto}</td><td style="text-align:right">$${r.importe.toLocaleString('es-AR')}</td></tr>`).join('');
   const totalCC = cc.reduce((s,r)=>s+(r.importe||0),0);
   const win = window.open('','_blank');
   win.document.write(`
