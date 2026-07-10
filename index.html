@@ -596,7 +596,10 @@ function renderTotales(){
   });
   const {porProducto, totalCombustibles, totalPagos, diferencia} = calcularTotales();
   document.getElementById('totales-wrap').innerHTML =
-    porProducto.map(p=>`<div class="total-line"><span><span class="producto-dot" style="background:${PRODUCT_COLORS[p.producto]||'#6b7280'}"></span>${p.producto} (${p.litros.toLocaleString('es-AR',{maximumFractionDigits:1})} L)</span><span>$${p.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>`).join('')
+    porProducto.map(p=>{
+      const color = PRODUCT_COLORS[p.producto]||'#6b7280';
+      return `<div class="total-line"><span><span class="producto-dot" style="background:${color}"></span><span style="font-weight:700;color:${color}">${p.producto}</span> <span style="color:#9ca3af">(${p.litros.toLocaleString('es-AR',{maximumFractionDigits:1})} L)</span></span><span style="font-weight:700;font-size:15px">$${p.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>`;
+    }).join('')
     + `<div class="total-line grand"><span>TOTAL COMBUSTIBLES</span><span>$${totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>`;
 
   const diffClass = Math.abs(diferencia)<1 ? 'diff-ok' : 'diff-bad';
