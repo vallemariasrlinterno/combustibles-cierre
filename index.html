@@ -73,6 +73,13 @@ tr:last-child td{border-bottom:none}
 .pago-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
 .diff-ok{color:#27500A;font-weight:700}
 .diff-bad{color:#A32D2D;font-weight:700}
+.diff-hero{margin-top:12px;padding:18px 20px;border-radius:14px;text-align:center}
+.diff-hero-label{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;opacity:.75}
+.diff-hero-val{font-size:38px;font-weight:800;letter-spacing:-1px;line-height:1.2;margin-top:2px}
+.diff-hero-sub{font-size:12px;margin-top:4px;opacity:.8}
+.diff-hero.positivo{background:#EAF3DE;color:#27500A}
+.diff-hero.negativo{background:#FCEBEB;color:#A32D2D}
+.diff-hero.cero{background:#EAF3DE;color:#27500A}
 .producto-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
 .precio-input-wrap{position:relative}
 .precio-input-wrap input{padding-left:24px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
@@ -764,10 +771,22 @@ function renderTotales(){
     }).join('')
     + `<div class="total-line grand"><span>TOTAL COMBUSTIBLES</span><span>$${totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>`;
 
-  const diffClass = Math.abs(diferencia)<1 ? 'diff-ok' : 'diff-bad';
+  let estado, signo;
+  if(Math.abs(diferencia)<1){ estado='cero'; signo=''; }
+  else if(diferencia>0){ estado='positivo'; signo='+'; }
+  else { estado='negativo'; signo='-'; }
+  const montoAbs = Math.abs(diferencia).toLocaleString('es-AR',{maximumFractionDigits:0});
+  const subtexto = estado==='cero' ? 'Caja exacta — perfecto' : estado==='positivo' ? 'Sobra dinero respecto a lo vendido' : 'Falta dinero respecto a lo vendido';
+  const totalReal = totalPagos - (pagos.cuentaCorriente||0); // los 5 medios que sí son dinero/instrumento en mano
   document.getElementById('diferencia-wrap').innerHTML =
-    `<div class="total-line"><span>Total medios de pago</span><span>$${totalPagos.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>
-     <div class="total-line grand"><span>Diferencia de caja</span><span class="${diffClass}">$${diferencia.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>`;
+    `<div class="total-line"><span>Medios de pago recibidos <span style="color:#9ca3af;font-weight:400">(dinero real)</span></span><span style="font-weight:700">$${totalReal.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>
+     <div class="total-line"><span style="color:#6b7280">+ Cuenta Corriente <span style="font-weight:400">(a cobrar, no es efectivo)</span></span><span style="color:#6b7280">$${(pagos.cuentaCorriente||0).toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>
+     <div class="total-line grand"><span>Total considerado para el cierre</span><span>$${totalPagos.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>
+     <div class="diff-hero ${estado}">
+       <div class="diff-hero-label">Diferencia de caja</div>
+       <div class="diff-hero-val">${signo}$${montoAbs}</div>
+       <div class="diff-hero-sub">${subtexto}</div>
+     </div>`;
 }
 
 function validarCierre(){
@@ -856,7 +875,7 @@ async function renderAdmContent(){
       </div>
       <div class="card"><div class="section-title"><i class="ti ti-history"></i> Últimos turnos cerrados</div>
       <div class="table-wrap"><table><thead><tr><th>Planilla</th><th>Fecha</th><th>Turno</th><th>Cerró</th><th>Total</th><th>Diferencia</th></tr></thead><tbody>
-      ${lista.map(c=>`<tr><td>${pStr(c.planilla)}</td><td>${c.fecha}</td><td><span class="badge badge-${c.turno}">${c.turno}</span></td><td>${c.cerradoPor}</td><td>$${c.totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td class="${Math.abs(c.diferencia)<1?'diff-ok':'diff-bad'}">$${c.diferencia.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#9ca3af">Todavía no hay turnos cerrados</td></tr>'}
+      ${lista.map(c=>`<tr><td>${pStr(c.planilla)}</td><td>${c.fecha}</td><td><span class="badge badge-${c.turno}">${c.turno}</span></td><td>${c.cerradoPor}</td><td>$${c.totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td class="${c.diferencia<0?'diff-bad':'diff-ok'}">${c.diferencia<0?'-':c.diferencia>0?'+':''}$${Math.abs(c.diferencia).toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#9ca3af">Todavía no hay turnos cerrados</td></tr>'}
       </tbody></table></div></div>`;
   } else if(admSection==='turnos'){
     const cerrados = await fbLoad('turnosCerrados') || {};
