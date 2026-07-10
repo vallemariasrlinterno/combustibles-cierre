@@ -884,13 +884,56 @@ async function renderAdmContent(){
       ${lista.map(c=>`<tr><td>${pStr(c.planilla)}</td><td>${c.fecha}</td><td><span class="badge badge-${c.turno}">${c.turno}</span></td><td>${c.cerradoPor}</td><td>${c.hora}</td><td>$${c.totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td>$${c.totalPagos.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td class="${Math.abs(c.diferencia)<1?'diff-ok':'diff-bad'}">$${c.diferencia.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td><button class="btn btn-sm" onclick="imprimirTurno(${c.planilla})"><i class="ti ti-file-download"></i> PDF</button></td></tr>`).join('') || '<tr><td colspan="9" style="text-align:center;color:#9ca3af">Sin turnos cerrados todavía</td></tr>'}
     </tbody></table></div></div>`;
   } else if(admSection==='usuarios'){
-    const b = await fbLoad('bloqueados') || bloqueados;
-    bloqueados = b;
-    el.innerHTML = `<div class="card"><p style="font-size:13px;color:#6b7280;margin-bottom:1rem">Bloqueo propio de esta app (no afecta Stock Nochero). Las contraseñas se administran desde Stock Nochero.</p>
-      <div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Cargo</th><th>Estado</th><th></th></tr></thead><tbody>
-      ${USERS.map(u=>`<tr><td>${u.name}</td><td>${u.cargo}</td><td>${bloqueados[u.id]?'<span class="badge badge-out">Bloqueado</span>':'<span class="badge badge-ok">Habilitado</span>'}</td><td><button class="btn btn-sm" onclick="toggleBloqueo('${u.id}')">${bloqueados[u.id]?'Habilitar':'Bloquear'}</button></td></tr>`).join('')}
+    const [b, passesData] = await Promise.all([ fbLoad('bloqueados'), fbLoad('passes', FB_BASE_NOCHERO) ]);
+    bloqueados = b || bloqueados;
+    const passesActuales = passesData || {};
+    el.innerHTML = `<div class="card">
+      <p style="font-size:13px;color:#6b7280;margin-bottom:1rem"><i class="ti ti-info-circle"></i> El bloqueo es propio de esta app (no afecta Stock Nochero). La contraseña sí es compartida — cambiarla acá también la actualiza en Stock Nochero. Clic en 🔑 para cambiarla.</p>
+      <div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Cargo</th><th>Usuario</th><th>Contraseña</th><th></th></tr></thead><tbody>
+      ${USERS.map(u=>{
+        const pass = passesActuales[u.id] || u.pass;
+        const bloq = !!bloqueados[u.id];
+        return `<tr>
+          <td><strong>${u.name}</strong>${bloq?' <span class="badge badge-out" style="margin-left:4px">bloqueado</span>':''}</td>
+          <td><span class="badge badge-${u.role==='admin'?'admin':'operador'}">${u.cargo}</span></td>
+          <td><code style="font-size:12px;background:#f3f4f6;padding:2px 6px;border-radius:4px">${u.id}</code></td>
+          <td><code style="font-size:12px;background:#f3f4f6;padding:2px 6px;border-radius:4px">${pass}</code></td>
+          <td style="white-space:nowrap">
+            <button class="btn btn-sm" onclick="editarPass('${u.id}','${u.name}')" title="Cambiar contraseña"><i class="ti ti-key"></i></button>
+            ${u.id!=='franco' ? `<button class="btn btn-sm" style="${bloq?'color:#A32D2D;border-color:#A32D2D':''}" onclick="toggleBloqueo('${u.id}')" title="${bloq?'Desbloquear':'Bloquear'}"><i class="ti ti-${bloq?'lock-open':'ban'}"></i></button>` : ''}
+          </td>
+        </tr>`;
+      }).join('')}
       </tbody></table></div></div>`;
   }
+}
+
+async function editarPass(uid, nombre){
+  const passesActuales = await fbLoad('passes', FB_BASE_NOCHERO) || {};
+  const actual = passesActuales[uid] || USERS.find(u=>u.id===uid)?.pass || '';
+  document.getElementById('modal').innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal">
+        <h2><i class="ti ti-key"></i> Cambiar contraseña</h2>
+        <p>Usuario: <strong>${nombre}</strong> · se actualiza también en Stock Nochero</p>
+        <input type="text" id="inp-new-pass" value="${actual}" style="margin-bottom:1rem" onkeydown="if(event.key==='Enter')guardarPass('${uid}')">
+        <div class="modal-btns">
+          <button class="btn" onclick="document.getElementById('modal').innerHTML=''">Cancelar</button>
+          <button class="btn btn-primary" onclick="guardarPass('${uid}')">Guardar</button>
+        </div>
+      </div>
+    </div>`;
+  setTimeout(()=>{ const i=document.getElementById('inp-new-pass'); if(i){ i.focus(); i.select(); } }, 100);
+}
+async function guardarPass(uid){
+  const v = (document.getElementById('inp-new-pass')?.value||'').trim();
+  if(v.length<3){ toast('Mínimo 3 caracteres','error'); return; }
+  const passesActuales = await fbLoad('passes', FB_BASE_NOCHERO) || {};
+  passesActuales[uid] = v;
+  await fbSave('passes', passesActuales, FB_BASE_NOCHERO);
+  document.getElementById('modal').innerHTML='';
+  toast(`✓ Contraseña de ${USERS.find(u=>u.id===uid)?.name} actualizada en ambas plataformas`,'success');
+  renderAdmContent();
 }
 // ═══════════════════════════════════════════════════
 // EXPORTAR PDF (vía impresión del navegador)
