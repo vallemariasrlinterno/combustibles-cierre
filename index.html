@@ -58,6 +58,9 @@ tr:last-child td{border-bottom:none}
 .section-title{font-size:15px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
 .surtidor-group{margin-bottom:1rem}
 .surtidor-title{font-size:13px;font-weight:700;color:#185FA5;background:#E6F1FB;padding:6px 12px;border-radius:8px 8px 0 0}
+.cara-header-row td{background:#EFF3F8!important;color:#185FA5;font-weight:800;font-size:12px;padding:7px 12px!important;text-transform:uppercase;letter-spacing:.5px;border-top:3px solid #185FA5!important;border-bottom:1px solid #d7e6f5!important}
+.fila-cara-par{background:#fafbfc}
+.fila-cara-impar{background:#fff}
 .medicion-input{width:100%;padding:7px 8px;font-size:13px;text-align:right}
 .litros-badge{font-weight:700;color:#27500A}
 .precio-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:.5rem}
@@ -510,21 +513,27 @@ function renderOperador(){
     </div>`;
   }).join('');
 
-  // Mediciones agrupadas por surtidor, una fila por pico — placeholder 000000 + sombreado + color por producto
+  // Mediciones agrupadas por surtidor y por cara, con separador visual entre caras
   let html='';
   let surActual=null;
+  let caraActual=null;
   PICOS.forEach(p=>{
     if(p.surtidor!==surActual){
       if(surActual!==null) html+='</tbody></table></div></div>';
       surActual=p.surtidor;
+      caraActual=null;
       html+=`<div class="surtidor-group"><div class="surtidor-title">Surtidor ${p.surtidor}</div><div class="table-wrap"><table>
-        <thead><tr><th>Cara</th><th>Pico</th><th>Producto</th><th>Inicial</th><th>Final</th><th>Litros</th></tr></thead><tbody>`;
+        <thead><tr><th>Pico</th><th>Producto</th><th>Inicial</th><th>Final</th><th>Litros</th></tr></thead><tbody>`;
+    }
+    if(p.cara!==caraActual){
+      caraActual=p.cara;
+      html+=`<tr class="cara-header-row"><td colspan="5"><i class="ti ti-corner-down-right"></i> Cara ${p.cara}</td></tr>`;
     }
     const m = mediciones.find(x=>x.pico===p.pico);
     const litros = (m.final!=null && m.inicial!=null) ? Math.max(0,(m.final-m.inicial)) : 0;
     const color = PRODUCT_COLORS[p.producto]||'#6b7280';
-    html+=`<tr>
-      <td>${p.cara}</td>
+    const filaClass = p.cara%2===0 ? 'fila-cara-par' : 'fila-cara-impar';
+    html+=`<tr class="${filaClass}">
       <td>${p.pico}</td>
       <td style="border-left:4px solid ${color}"><span class="producto-dot" style="background:${color}"></span><span style="color:${color};font-weight:600">${p.producto}</span></td>
       <td><input class="medicion-input ${m.inicial!=null?'campo-cargado':'campo-vacio'}" type="number" step="0.1" placeholder="000000" value="${m.inicial??''}" ${cerrado?'disabled':''} onchange="actualizarMedicion('${m.id}','inicial',this.value)"></td>
