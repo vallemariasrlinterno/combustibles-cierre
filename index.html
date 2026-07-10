@@ -68,6 +68,16 @@ tr:last-child td{border-bottom:none}
 .pago-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
 .diff-ok{color:#27500A;font-weight:700}
 .diff-bad{color:#A32D2D;font-weight:700}
+.producto-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.precio-input-wrap{position:relative}
+.precio-input-wrap input{padding-left:24px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+.precio-input-wrap .peso-sign{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:#6b7280;font-size:14px;font-weight:600;pointer-events:none}
+.campo-vacio{background:#f3f4f6!important;color:#9ca3af!important;border-color:#e5e7eb!important}
+.campo-vacio::placeholder{color:#c1c7d0}
+.campo-cargado{background:#EAF3DE!important;color:#1a1a1a!important;border-color:#3B6D11!important;font-weight:700}
+.cc-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:.75rem;align-items:end}
+.cc-form label{margin-top:0}
+.cc-form>div:last-child{display:flex}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:200;padding:1rem}
 .modal{background:#fff;border-radius:16px;padding:1.5rem;max-width:460px;width:100%;text-align:center;max-height:90vh;overflow-y:auto}
 .modal h2{font-size:18px;font-weight:600;margin-bottom:.5rem}
@@ -168,6 +178,11 @@ async function fbLoad(docName, base){
     </div>
 
     <div class="card">
+      <div class="section-title"><i class="ti ti-users"></i> Cuenta Corriente — venta a clientes</div>
+      <div id="cc-wrap"></div>
+    </div>
+
+    <div class="card">
       <div class="section-title"><i class="ti ti-credit-card"></i> Cierre de caja — medios de pago</div>
       <div class="pago-grid" id="pagos-wrap"></div>
       <div style="margin-top:1rem" id="diferencia-wrap"></div>
@@ -237,6 +252,14 @@ const PICOS = [
   {pico:16, surtidor:4, cara:2, producto:'Kerosene'},
 ];
 const PRODUCTOS = ['Nafta Super','V-Power Nafta','Nafta Super C','V-Power Diesel','Evolux','Kerosene'];
+const PRODUCT_COLORS = {
+  'Nafta Super': '#DC2626',
+  'V-Power Nafta': '#16A34A',
+  'Nafta Super C': '#DC2626',
+  'V-Power Diesel': '#0EA5E9',
+  'Evolux': '#1a1a1a',
+  'Kerosene': '#9ca3af',
+};
 const MEDIOS_PAGO = [
   {id:'efectivo', label:'Efectivo'},
   {id:'tarjetaPlaya', label:'Tarjeta de Playa'},
@@ -296,7 +319,9 @@ const T = turnoActual(); // calculado una vez al cargar
 let currentUser=null;
 let precios={}; // {producto:number}
 let mediciones=mediicionesVacias();
-let pagos={efectivo:null,tarjetaPlaya:null,tarjetaShop:null,pagosElectronicos:null,cheque:null,cuentaCorriente:null};
+let pagos={efectivo:null,tarjetaPlaya:null,tarjetaShop:null,pagosElectronicos:null,cheque:null,cuentaCorriente:0};
+let cuentaCorriente=[]; // {id,fecha,litros,cliente,producto,importe}
+let kerosenoDesbloqueado=false;
 let turnosCerrados={};
 let bloqueados={eitan:true}; // default: Eitan bloqueado en esta app
 
@@ -365,30 +390,97 @@ async function cargarEstadoTurno(){
     // el turno ya fue cerrado por otro usuario
     mediciones = turnosCerrados[key].mediciones;
     pagos = turnosCerrados[key].pagos;
+    cuentaCorriente = turnosCerrados[key].cuentaCorriente || [];
   } else if(draft && draft[key]){
     mediciones = draft[key].mediciones || mediicionesVacias();
     pagos = draft[key].pagos || pagos;
+    cuentaCorriente = draft[key].cuentaCorriente || [];
     if(draft[key].precios) precios = draft[key].precios;
   } else {
     mediciones = mediicionesVacias();
+    cuentaCorriente = [];
   }
+  syncCuentaCorriente();
 }
 
 async function guardarDraft(){
   const key=`T${T.num}`;
   const draft = await fbLoad('draftActual') || {};
-  draft[key] = {mediciones, pagos, precios, user:currentUser?.name, fecha:T.fecha, turno:T.nombre};
+  draft[key] = {mediciones, pagos, precios, cuentaCorriente, user:currentUser?.name, fecha:T.fecha, turno:T.nombre};
   await fbSave('draftActual', draft);
 }
 
 async function guardarPrecios(){
-  PRODUCTOS.forEach(p=>{
-    const v=parseFloat(document.getElementById('precio_'+slug(p)).value)||0;
-    precios[p]=v;
-  });
   await fbSave('precios', precios);
   toast('✓ Precios guardados','success');
+}
+
+// Formato de precio: $ + miles con punto (ej. 1500 -> "1.500")
+function formatMiles(n){ return Math.round(n).toLocaleString('es-AR'); }
+function onPrecioInput(el){
+  el.value = el.value.replace(/[^0-9]/g,'');
+}
+function onPrecioBlur(prod, el){
+  const raw = el.value.replace(/[^0-9]/g,'');
+  const n = raw ? parseInt(raw,10) : 0;
+  precios[prod]=n;
+  if(n>0){ el.value=formatMiles(n); el.classList.remove('campo-vacio'); el.classList.add('campo-cargado'); }
+  else { el.value=''; el.classList.add('campo-vacio'); el.classList.remove('campo-cargado'); }
+  guardarDraft();
   renderTotales();
+}
+function toggleKeroseno(){
+  kerosenoDesbloqueado = !kerosenoDesbloqueado;
+  renderOperador();
+}
+
+// ═══════════════════════════════════════════════════
+// CUENTA CORRIENTE — venta a clientes a cuenta
+// ═══════════════════════════════════════════════════
+function sumCuentaCorriente(){ return cuentaCorriente.reduce((s,r)=>s+(r.importe||0),0); }
+function syncCuentaCorriente(){ pagos.cuentaCorriente = sumCuentaCorriente(); }
+
+function agregarCuentaCorriente(){
+  const fecha = document.getElementById('cc-fecha').value || T.fk;
+  const litros = parseFloat(document.getElementById('cc-litros').value)||0;
+  const cliente = document.getElementById('cc-cliente').value.trim();
+  const producto = document.getElementById('cc-producto').value;
+  const importe = parseFloat(document.getElementById('cc-importe').value)||0;
+  if(!cliente || !producto || importe<=0){ toast('Completá cliente, producto e importe','error'); return; }
+  cuentaCorriente.push({id:'cc'+Date.now(), fecha, litros, cliente, producto, importe});
+  syncCuentaCorriente();
+  guardarDraft();
+  renderOperador();
+}
+function eliminarCuentaCorriente(id){
+  cuentaCorriente = cuentaCorriente.filter(r=>r.id!==id);
+  syncCuentaCorriente();
+  guardarDraft();
+  renderOperador();
+}
+function renderCuentaCorriente(cerrado){
+  const filas = cuentaCorriente.map(r=>`<tr>
+    <td>${r.fecha}</td>
+    <td style="text-align:right">${r.litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td>
+    <td>${r.cliente}</td>
+    <td><span class="producto-dot" style="background:${PRODUCT_COLORS[r.producto]||'#6b7280'}"></span>${r.producto}</td>
+    <td style="text-align:right">$${r.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</td>
+    <td>${cerrado?'':`<button class="btn btn-sm btn-danger" onclick="eliminarCuentaCorriente('${r.id}')"><i class="ti ti-trash"></i></button>`}</td>
+  </tr>`).join('');
+  const total = sumCuentaCorriente();
+  document.getElementById('cc-wrap').innerHTML = `
+    ${cerrado?'':`<div class="cc-form">
+      <div><label>Fecha</label><input type="date" id="cc-fecha" value="${T.fk}"></div>
+      <div><label>Litros</label><input type="number" step="0.1" id="cc-litros" placeholder="0"></div>
+      <div><label>Cliente</label><input type="text" id="cc-cliente" placeholder="Nombre"></div>
+      <div><label>Producto</label><select id="cc-producto">${PRODUCTOS.filter(p=>p!=='Kerosene').map(p=>`<option value="${p}">${p}</option>`).join('')}</select></div>
+      <div><label>Importe</label><input type="number" step="0.01" id="cc-importe" placeholder="0"></div>
+      <div><button class="btn btn-primary btn-block" onclick="agregarCuentaCorriente()"><i class="ti ti-plus"></i> Agregar</button></div>
+    </div>`}
+    <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Litros</th><th>Cliente</th><th>Producto</th><th>Importe</th><th></th></tr></thead><tbody>
+    ${filas || '<tr><td colspan="6" style="text-align:center;color:#9ca3af">Sin cargas todavía</td></tr>'}
+    </tbody></table></div>
+    <div class="total-line grand" style="margin-top:8px"><span>TOTAL CUENTA CORRIENTE</span><span>$${total.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>`;
 }
 
 // ═══════════════════════════════════════════════════
@@ -400,14 +492,25 @@ function renderOperador(){
     `Planilla <strong>${pStr(T.num)}</strong> · Turno <strong>${T.nombre}</strong> · ${T.fecha}` +
     (cerrado ? ` <span class="badge badge-out" style="margin-left:8px"><i class="ti ti-lock"></i> Cerrada</span> <button class="btn btn-sm" style="margin-left:8px" onclick="imprimirTurno(${T.num})"><i class="ti ti-file-download"></i> Exportar PDF</button>` : ` <span class="badge badge-ok" style="margin-left:8px">Abierta</span>`);
 
-  // Precios
-  document.getElementById('precios-wrap').innerHTML = PRODUCTOS.map(p=>`
-    <div class="precio-box">
-      <label>${p}</label>
-      <input type="number" step="0.01" id="precio_${slug(p)}" value="${precios[p]||''}" ${cerrado?'disabled':''} onchange="renderTotales()">
-    </div>`).join('');
+  // Precios — formateados con $ y separador de miles, color por producto, Kerosene bloqueado
+  document.getElementById('precios-wrap').innerHTML = PRODUCTOS.map(p=>{
+    const color = PRODUCT_COLORS[p]||'#6b7280';
+    const filled = precios[p] && precios[p]>0;
+    const esKerosene = p==='Kerosene';
+    const disabled = cerrado || (esKerosene && !kerosenoDesbloqueado);
+    return `<div class="precio-box">
+      <label style="color:${color}"><span class="producto-dot" style="background:${color}"></span>${p}</label>
+      <div class="precio-input-wrap">
+        <span class="peso-sign">$</span>
+        <input type="text" inputmode="numeric" class="${filled?'campo-cargado':'campo-vacio'}" id="precio_${slug(p)}"
+          placeholder="0.000" value="${filled?formatMiles(precios[p]):''}" ${disabled?'disabled':''}
+          oninput="onPrecioInput(this)" onblur="onPrecioBlur('${p}',this)">
+      </div>
+      ${esKerosene && !cerrado ? `<button class="btn btn-sm" style="margin-top:6px;width:100%" onclick="toggleKeroseno()"><i class="ti ti-${kerosenoDesbloqueado?'lock-open':'lock'}"></i> ${kerosenoDesbloqueado?'Bloquear':'Editar (no se comercializa)'}</button>` : ''}
+    </div>`;
+  }).join('');
 
-  // Mediciones agrupadas por surtidor, una fila por pico
+  // Mediciones agrupadas por surtidor, una fila por pico — placeholder 000000 + sombreado + color por producto
   let html='';
   let surActual=null;
   PICOS.forEach(p=>{
@@ -419,24 +522,34 @@ function renderOperador(){
     }
     const m = mediciones.find(x=>x.pico===p.pico);
     const litros = (m.final!=null && m.inicial!=null) ? Math.max(0,(m.final-m.inicial)) : 0;
+    const color = PRODUCT_COLORS[p.producto]||'#6b7280';
     html+=`<tr>
       <td>${p.cara}</td>
       <td>${p.pico}</td>
-      <td>${p.producto}</td>
-      <td><input class="medicion-input" type="number" step="0.1" value="${m.inicial??''}" ${cerrado?'disabled':''} onchange="actualizarMedicion('${m.id}','inicial',this.value)"></td>
-      <td><input class="medicion-input" type="number" step="0.1" value="${m.final??''}" ${cerrado?'disabled':''} onchange="actualizarMedicion('${m.id}','final',this.value)"></td>
+      <td style="border-left:4px solid ${color}"><span class="producto-dot" style="background:${color}"></span><span style="color:${color};font-weight:600">${p.producto}</span></td>
+      <td><input class="medicion-input ${m.inicial!=null?'campo-cargado':'campo-vacio'}" type="number" step="0.1" placeholder="000000" value="${m.inicial??''}" ${cerrado?'disabled':''} onchange="actualizarMedicion('${m.id}','inicial',this.value)"></td>
+      <td><input class="medicion-input ${m.final!=null?'campo-cargado':'campo-vacio'}" type="number" step="0.1" placeholder="000000" value="${m.final??''}" ${cerrado?'disabled':''} onchange="actualizarMedicion('${m.id}','final',this.value)"></td>
       <td class="litros-badge">${litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td>
     </tr>`;
   });
   html+='</tbody></table></div></div>';
   document.getElementById('mediciones-wrap').innerHTML=html;
 
-  // Pagos
-  document.getElementById('pagos-wrap').innerHTML = MEDIOS_PAGO.map(m=>`
-    <div>
+  // Cuenta corriente
+  renderCuentaCorriente(cerrado);
+  syncCuentaCorriente();
+
+  // Pagos — Cuenta Corriente queda automática/computada, el resto manual
+  document.getElementById('pagos-wrap').innerHTML = MEDIOS_PAGO.map(m=>{
+    if(m.id==='cuentaCorriente'){
+      return `<div><label>${m.label} <span style="font-weight:400;color:#9ca3af">(automático)</span></label>
+        <input type="text" value="$${(pagos.cuentaCorriente||0).toLocaleString('es-AR',{maximumFractionDigits:0})}" disabled class="campo-cargado"></div>`;
+    }
+    return `<div>
       <label>${m.label}</label>
       <input type="number" step="0.01" id="pago_${m.id}" value="${pagos[m.id]??''}" ${cerrado?'disabled':''} onchange="actualizarPago('${m.id}',this.value)">
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   renderTotales();
 }
@@ -474,7 +587,7 @@ function renderTotales(){
   });
   const {porProducto, totalCombustibles, totalPagos, diferencia} = calcularTotales();
   document.getElementById('totales-wrap').innerHTML =
-    porProducto.map(p=>`<div class="total-line"><span>${p.producto} (${p.litros.toLocaleString('es-AR',{maximumFractionDigits:1})} L)</span><span>$${p.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>`).join('')
+    porProducto.map(p=>`<div class="total-line"><span><span class="producto-dot" style="background:${PRODUCT_COLORS[p.producto]||'#6b7280'}"></span>${p.producto} (${p.litros.toLocaleString('es-AR',{maximumFractionDigits:1})} L)</span><span>$${p.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>`).join('')
     + `<div class="total-line grand"><span>TOTAL COMBUSTIBLES</span><span>$${totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>`;
 
   const diffClass = Math.abs(diferencia)<1 ? 'diff-ok' : 'diff-bad';
@@ -507,7 +620,7 @@ async function cerrarTurno(){
   const cerrados = await fbLoad('turnosCerrados') || {};
   cerrados[`T${T.num}`] = {
     planilla:T.num, fecha:T.fecha, turno:T.nombre, cerradoPor:currentUser.name, hora:ahoraAR().hhmm,
-    mediciones, precios: {...precios}, pagos: {...pagos}, porProducto, totalCombustibles, totalPagos, diferencia
+    mediciones, precios: {...precios}, pagos: {...pagos}, cuentaCorriente: [...cuentaCorriente], porProducto, totalCombustibles, totalPagos, diferencia
   };
   await fbSave('turnosCerrados', cerrados);
   turnosCerrados = cerrados;
@@ -571,6 +684,9 @@ function imprimirTurno(numPlanilla){
   }).join('');
   const filasProductos = c.porProducto.map(p=>`<tr><td>${p.producto}</td><td style="text-align:right">$${(c.precios[p.producto]||0).toLocaleString('es-AR')}</td><td style="text-align:right">${p.litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td><td style="text-align:right">$${p.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>`).join('');
   const filasPagos = MEDIOS_PAGO.map(m=>`<tr><td>${m.label}</td><td style="text-align:right">$${(c.pagos[m.id]||0).toLocaleString('es-AR')}</td></tr>`).join('');
+  const cc = c.cuentaCorriente || [];
+  const filasCC = cc.map(r=>`<tr><td>${r.fecha}</td><td style="text-align:right">${r.litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td><td>${r.cliente}</td><td>${r.producto}</td><td style="text-align:right">$${r.importe.toLocaleString('es-AR')}</td></tr>`).join('');
+  const totalCC = cc.reduce((s,r)=>s+(r.importe||0),0);
   const win = window.open('','_blank');
   win.document.write(`
     <html><head><title>Planilla ${pStr(numPlanilla)}</title>
@@ -595,6 +711,9 @@ function imprimirTurno(numPlanilla){
     <table><thead><tr><th>Medio</th><th>Importe</th></tr></thead><tbody>${filasPagos}
     <tr class="tot"><td>TOTAL PAGOS</td><td style="text-align:right">$${c.totalPagos.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
     <tr class="tot"><td>DIFERENCIA DE CAJA</td><td style="text-align:right">$${c.diferencia.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr></tbody></table>
+    ${cc.length ? `<h2>Cuenta corriente — venta a clientes</h2>
+    <table><thead><tr><th>Fecha</th><th>Litros</th><th>Cliente</th><th>Producto</th><th>Importe</th></tr></thead><tbody>${filasCC}
+    <tr class="tot"><td colspan="4">TOTAL CUENTA CORRIENTE</td><td style="text-align:right">$${totalCC.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr></tbody></table>` : ''}
     <button class="no-print" onclick="window.print()" style="padding:8px 16px;margin-top:10px">Imprimir / Guardar PDF</button>
     </body></html>`);
   win.document.close();
