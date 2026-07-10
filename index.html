@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Combustibles · Cierre de Turno</title>
+<title>Combustibles Cierre</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -51,7 +51,7 @@ tr:last-child td{border-bottom:none}
 .login-wrap{max-width:420px;margin:3.5rem auto;padding:0 1rem}
 .brand-wrap{text-align:center;margin-bottom:1.75rem}
 .brand-logo{font-size:40px;line-height:1}
-.brand-title{font-size:32px;font-weight:800;color:#185FA5;margin-top:2px;letter-spacing:-.5px}
+.brand-title{font-size:28px;font-weight:800;color:#185FA5;margin-top:2px;letter-spacing:-.5px}
 .brand-subtitle{font-size:15px;color:#6b7280;margin-top:6px}
 .login-card{background:#fff;border-radius:16px;padding:1.5rem 1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.06);border:1px solid #e5e7eb}
 .login-card h1{font-size:19px;font-weight:700;margin-bottom:1rem}
@@ -136,8 +136,8 @@ async function fbLoad(docName, base){
   <div class="login-wrap">
     <div class="brand-wrap">
       <div class="brand-logo">⛽</div>
-      <div class="brand-title">Combustibles</div>
-      <div class="brand-subtitle">Cierre de turno · Control de combustibles</div>
+      <div class="brand-title">Combustibles Cierre</div>
+      <div class="brand-subtitle">Control de combustibles · Cierre de turno</div>
     </div>
     <div class="login-card">
       <h1>Ingresar</h1>
@@ -158,7 +158,7 @@ async function fbLoad(docName, base){
 <div id="screen-operador" class="screen">
   <div class="container">
     <div class="header">
-      <div class="logo">⛽ Combustibles <span>· Cierre</span></div>
+      <div class="logo">⛽ Combustibles Cierre</div>
       <div class="header-right">
         <span id="op-user-badge" class="badge badge-operador"></span>
         <button class="btn btn-sm" onclick="doLogout()"><i class="ti ti-logout"></i> Salir</button>
@@ -206,7 +206,7 @@ async function fbLoad(docName, base){
 <div id="screen-admin" class="screen">
   <div class="container">
     <div class="header">
-      <div class="logo">⛽ Combustibles <span>· Admin</span></div>
+      <div class="logo">⛽ Combustibles Cierre</div>
       <div class="header-right">
         <span id="adm-user-badge" class="badge badge-admin"></span>
         <button class="btn btn-sm" onclick="doLogout()"><i class="ti ti-logout"></i> Salir</button>
@@ -845,7 +845,7 @@ function imprimirTurno(numPlanilla){
   const totalCC = cc.reduce((s,r)=>s+(r.importe||0),0);
   const win = window.open('','_blank');
   win.document.write(`
-    <html><head><title>Planilla ${pStr(numPlanilla)}</title>
+    <html><head><title>Combustibles Cierre — Planilla ${pStr(numPlanilla)}</title>
     <style>
       body{font-family:Arial,sans-serif;padding:24px;color:#1a1a1a;font-size:13px}
       h1{font-size:18px;margin-bottom:2px}h2{font-size:14px;margin:18px 0 6px}
@@ -856,7 +856,7 @@ function imprimirTurno(numPlanilla){
       .tot{font-weight:700}
       @media print{.no-print{display:none}}
     </style></head><body>
-    <h1>⛽ Combustibles — Planilla ${pStr(numPlanilla)}</h1>
+    <h1>⛽ Combustibles Cierre — Planilla ${pStr(numPlanilla)}</h1>
     <div class="meta">Turno <strong>${c.turno}</strong> · ${c.fecha} · Cerró: <strong>${c.cerradoPor}</strong> a las ${c.hora}</div>
     <h2>Lectura de surtidores</h2>
     <table><thead><tr><th>Surtidor</th><th>Cara</th><th>Pico</th><th>Producto</th><th>Inicial</th><th>Final</th><th>Litros</th></tr></thead><tbody>${filasMediciones}</tbody></table>
