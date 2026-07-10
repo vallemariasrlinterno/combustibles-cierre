@@ -78,6 +78,11 @@ tr:last-child td{border-bottom:none}
 .campo-vacio{background:#f3f4f6!important;color:#9ca3af!important;border-color:#e5e7eb!important}
 .campo-vacio::placeholder{color:#c1c7d0}
 .campo-cargado{background:#EAF3DE!important;color:#1a1a1a!important;border-color:#3B6D11!important;font-weight:700}
+.campo-error{background:#FCEBEB!important;color:#A32D2D!important;border-color:#A32D2D!important;font-weight:700}
+.aviso-box{border-radius:8px;padding:9px 13px;font-size:12.5px;margin-top:8px;display:flex;gap:8px;align-items:flex-start;line-height:1.4}
+.aviso-error{background:#FCEBEB;color:#A32D2D}
+.aviso-warning{background:#FAEEDA;color:#633806}
+.aviso-box i{margin-top:1px;flex-shrink:0}
 .cc-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:.75rem;align-items:end}
 .cc-form label{margin-top:0}
 .cc-form>div:last-child{display:flex}
@@ -173,6 +178,7 @@ async function fbLoad(docName, base){
     <div class="card">
       <div class="section-title"><i class="ti ti-gauge"></i> Lectura de surtidores</div>
       <div id="mediciones-wrap"></div>
+      <div id="avisos-mediciones-wrap"></div>
     </div>
 
     <div class="card">
@@ -555,16 +561,20 @@ function renderOperador(){
     const litros = (m.final!=null && m.inicial!=null) ? Math.max(0,(m.final-m.inicial)) : 0;
     const color = PRODUCT_COLORS[p.producto]||'#6b7280';
     const filaClass = p.cara%2===0 ? 'fila-cara-par' : 'fila-cara-impar';
+    const hayError = (m.inicial!=null && m.final!=null && m.final<m.inicial);
+    const inicialClass = hayError ? 'campo-error' : (m.inicial!=null?'campo-cargado':'campo-vacio');
+    const finalClass = hayError ? 'campo-error' : (m.final!=null?'campo-cargado':'campo-vacio');
     html+=`<tr class="${filaClass}">
       <td>${p.pico}</td>
       <td style="border-left:4px solid ${color}"><span class="producto-dot" style="background:${color}"></span><span style="color:${color};font-weight:600">${p.producto}</span></td>
-      <td><input class="medicion-input ${m.inicial!=null?'campo-cargado':'campo-vacio'}" type="number" step="0.1" placeholder="000000" value="${m.inicial??''}" ${cerrado?'disabled':''} onchange="actualizarMedicion('${m.id}','inicial',this.value)"></td>
-      <td><input class="medicion-input ${m.final!=null?'campo-cargado':'campo-vacio'}" type="number" step="0.1" placeholder="000000" value="${m.final??''}" ${cerrado?'disabled':''} onchange="actualizarMedicion('${m.id}','final',this.value)"></td>
+      <td><input class="medicion-input ${inicialClass}" type="number" step="0.1" placeholder="000000" value="${m.inicial??''}" ${cerrado?'disabled':''} onchange="actualizarMedicion('${m.id}','inicial',this.value)"></td>
+      <td><input class="medicion-input ${finalClass}" type="number" step="0.1" placeholder="000000" value="${m.final??''}" ${cerrado?'disabled':''} onchange="actualizarMedicion('${m.id}','final',this.value)"></td>
       <td class="litros-badge">${litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td>
     </tr>`;
   });
   html+='</tbody></table></div></div>';
   document.getElementById('mediciones-wrap').innerHTML=html;
+  renderAvisosMediciones(cerrado);
 
   // Cuenta corriente
   renderCuentaCorriente(cerrado);
@@ -583,6 +593,54 @@ function renderOperador(){
   }).join('');
 
   renderTotales();
+}
+
+// ═══════════════════════════════════════════════════
+// ADVERTENCIAS DE LECTURA — evitar errores de tipeo
+// ═══════════════════════════════════════════════════
+// Busca el Final con el que cerró este mismo pico en el turno anterior más reciente
+function buscarFinalTurnoAnterior(pico){
+  let n = T.num-1, intentos=0;
+  while(n>=P0 && intentos<9){
+    const c = turnosCerrados[`T${n}`];
+    if(c){
+      const m = (c.mediciones||[]).find(x=>x.pico===pico);
+      if(m && m.final!=null) return {valor:m.final, planilla:n};
+    }
+    n--; intentos++;
+  }
+  return null;
+}
+const LITROS_SOSPECHOSOS = 10000; // umbral por pico por turno, ajustable
+
+function detectarAdvertenciasMediciones(){
+  const avisos=[];
+  PICOS.forEach(p=>{
+    const m = mediciones.find(x=>x.pico===p.pico);
+    if(m.inicial!=null && m.final!=null){
+      if(m.final < m.inicial){
+        avisos.push({tipo:'error', texto:`<strong>Pico ${p.pico}</strong> (${p.producto}, Surtidor ${p.surtidor}): el Final (${m.final.toLocaleString('es-AR')}) es menor al Inicial (${m.inicial.toLocaleString('es-AR')}). El final nunca puede ser menor al inicial — a lo sumo igual, si no se vendió nada.`});
+      } else {
+        const litros = m.final-m.inicial;
+        if(litros > LITROS_SOSPECHOSOS){
+          avisos.push({tipo:'warning', texto:`<strong>Pico ${p.pico}</strong> (${p.producto}): ${litros.toLocaleString('es-AR')} L vendidos en el turno es un valor muy alto — revisá que no falte o sobre un dígito.`});
+        }
+      }
+    }
+    const prev = buscarFinalTurnoAnterior(p.pico);
+    if(prev!=null && m.inicial!=null && m.inicial!==prev.valor){
+      avisos.push({tipo:'warning', texto:`<strong>Pico ${p.pico}</strong> (${p.producto}): la planilla ${pStr(prev.planilla)} cerró este pico en ${prev.valor.toLocaleString('es-AR')}, pero cargaste ${m.inicial.toLocaleString('es-AR')} como Inicial. Verificá la lectura del surtidor.`});
+    }
+  });
+  return avisos;
+}
+
+function renderAvisosMediciones(cerrado){
+  const el = document.getElementById('avisos-mediciones-wrap');
+  if(!el) return;
+  if(cerrado){ el.innerHTML=''; return; }
+  const avisos = detectarAdvertenciasMediciones();
+  el.innerHTML = avisos.map(a=>`<div class="aviso-box aviso-${a.tipo}"><i class="ti ti-${a.tipo==='error'?'alert-circle':'alert-triangle'}"></i><span>${a.texto}</span></div>`).join('');
 }
 
 function actualizarMedicion(id, campo, val){
@@ -640,6 +698,7 @@ function validarCierre(){
     if(p.producto==='Kerosene') return; // excepción
     const m = mediciones.find(x=>x.pico===p.pico);
     if(m.inicial==null || m.final==null) errores.push(`Falta cargar el Pico ${p.pico} — ${p.producto} (Surtidor ${p.surtidor}, Cara ${p.cara})`);
+    else if(m.final < m.inicial) errores.push(`Pico ${p.pico} — ${p.producto}: el Final no puede ser menor al Inicial`);
   });
   return errores;
 }
