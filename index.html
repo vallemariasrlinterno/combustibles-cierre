@@ -499,14 +499,14 @@ function renderOperador(){
     const esKerosene = p==='Kerosene';
     const disabled = cerrado || (esKerosene && !kerosenoDesbloqueado);
     return `<div class="precio-box">
-      <label style="color:${color}"><span class="producto-dot" style="background:${color}"></span>${p}</label>
+      <label style="color:${color};font-weight:700;font-size:14px"><span class="producto-dot" style="background:${color}"></span>${p}</label>
       <div class="precio-input-wrap">
         <span class="peso-sign">$</span>
         <input type="text" inputmode="numeric" class="${filled?'campo-cargado':'campo-vacio'}" id="precio_${slug(p)}"
           placeholder="0.000" value="${filled?formatMiles(precios[p]):''}" ${disabled?'disabled':''}
           oninput="onPrecioInput(this)" onblur="onPrecioBlur('${p}',this)">
       </div>
-      ${esKerosene && !cerrado ? `<button class="btn btn-sm" style="margin-top:6px;width:100%" onclick="toggleKeroseno()"><i class="ti ti-${kerosenoDesbloqueado?'lock-open':'lock'}"></i> ${kerosenoDesbloqueado?'Bloquear':'Editar (no se comercializa)'}</button>` : ''}
+      ${esKerosene && !cerrado ? `<button class="btn btn-sm" style="margin-top:6px;width:100%" onclick="toggleKeroseno()"><i class="ti ti-${kerosenoDesbloqueado?'lock-open':'lock'}"></i> ${kerosenoDesbloqueado?'Bloquear':'Editar'}</button>` : ''}
     </div>`;
   }).join('');
 
