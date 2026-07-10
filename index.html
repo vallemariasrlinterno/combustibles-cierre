@@ -329,6 +329,15 @@ function turnoActual(){
   return {fk,ti,diff,num,nombre:TURNOS[ti],fecha,hora:ar.hhmm};
 }
 function pStr(n){return n?'#'+String(n).padStart(5,'0'):'—';}
+function fkDisplay(fk){const[y,m,d]=fk.split('-');return`${parseInt(d)}/${parseInt(m)}/${y}`;}
+function planillasDia(fk){
+  const diff=diffDiasFk(FK_INICIO,fk);
+  return TURNOS.map((_,ti)=>({
+    ti, nombre:TURNOS[ti],
+    num:planillaNum(diff,ti),
+    k:planillaNum(diff,ti)?`T${planillaNum(diff,ti)}`:null
+  }));
+}
 
 const T = turnoActual(); // calculado una vez al cargar
 
@@ -854,6 +863,7 @@ async function cerrarTurno(){
 // ADMIN
 // ═══════════════════════════════════════════════════
 let admSection='resumen';
+let admFk=null; // fecha que se está mirando en Resumen (null = hoy)
 function showAdm(sec, el){
   admSection=sec;
   document.querySelectorAll('#screen-admin .tab').forEach(t=>t.classList.remove('active'));
@@ -865,18 +875,70 @@ async function renderAdmContent(){
   if(admSection==='resumen'){
     const cerrados = await fbLoad('turnosCerrados') || {};
     turnosCerrados = cerrados;
-    const lista = Object.values(cerrados).sort((a,b)=>b.planilla-a.planilla).slice(0,10);
-    const totalHoy = Object.values(cerrados).filter(c=>c.fecha===T.fecha).reduce((s,c)=>s+c.totalCombustibles,0);
+    if(!admFk) admFk = T.fk;
+    const fk = admFk;
+    const esHoy = fk===T.fk;
+    const esPrimerDia = diffDiasFk(FK_INICIO, fk) <= 0;
+    const day = new Date(fk+'T12:00:00');
+    const prev = new Date(day); prev.setDate(prev.getDate()-1);
+    const next = new Date(day); next.setDate(next.getDate()+1);
+    const prevFk = prev.getFullYear()+'-'+String(prev.getMonth()+1).padStart(2,'0')+'-'+String(prev.getDate()).padStart(2,'0');
+    const nextFk = next.getFullYear()+'-'+String(next.getMonth()+1).padStart(2,'0')+'-'+String(next.getDate()).padStart(2,'0');
+    const planillaActualReal = turnoActual().num;
+
+    const planes = planillasDia(fk);
+    let turnosCerradosDia=0, totalVendidoDia=0, litrosVendidosDia=0;
+    const turnoCards = planes.map(p=>{
+      if(p.num===null) return `<div class="turno-card" style="opacity:.35"><span class="badge badge-${p.nombre}">${p.nombre}</span><div style="font-size:12px;color:#9ca3af;margin-top:6px">no aplica</div></div>`;
+      const c = cerrados[p.k] || null;
+      const cerrado = !!c;
+      const esPasado = p.num < planillaActualReal;
+      const esActual = p.num === planillaActualReal;
+      if(cerrado){ turnosCerradosDia++; totalVendidoDia+=c.totalCombustibles||0; litrosVendidosDia+=(c.porProducto||[]).reduce((s,x)=>s+(x.litros||0),0); }
+      let estadoHtml, valorHtml;
+      if(cerrado){
+        estadoHtml = `<span class="badge badge-out" style="background:#f3f4f6;color:#6b7280"><i class="ti ti-lock" style="font-size:9px"></i> cerrado</span>`;
+        valorHtml = `<div style="font-size:17px;font-weight:700;margin:5px 0">$${c.totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</div>`;
+      } else if(esPasado){
+        estadoHtml = `<span class="badge badge-out"><i class="ti ti-alert-triangle" style="font-size:9px"></i> sin informar</span>`;
+        valorHtml = `<div style="font-size:12px;color:#A32D2D;font-weight:500;margin:5px 0">falta cerrar este turno</div>`;
+      } else if(esActual){
+        estadoHtml = `<span class="badge badge-ok">● en curso</span>`;
+        valorHtml = `<div style="font-size:12px;color:#27500A;margin:5px 0">turno abierto ahora</div>`;
+      } else {
+        estadoHtml = `<span class="badge" style="color:#9ca3af;background:#f3f4f6">○ no iniciado</span>`;
+        valorHtml = `<div style="font-size:13px;color:#d1d5db;margin:5px 0">—</div>`;
+      }
+      return `<div class="turno-card">
+        <div style="display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap">
+          <span class="badge badge-${p.nombre}">${p.nombre}</span>
+          <span style="font-size:10px;color:#9ca3af">${pStr(p.num)}</span>
+        </div>
+        <div style="margin-top:4px">${estadoHtml}</div>
+        ${valorHtml}
+        ${c?`<div style="font-size:11px;color:#6b7280">${c.cerradoPor} · ${c.hora}</div>`:''}
+        ${cerrado?`<div style="margin-top:8px;display:flex;gap:4px;justify-content:center">
+          <button class="btn btn-sm" style="font-size:11px;color:#185FA5;border-color:#185FA5" onclick="reabrirTurno('${p.k}',${p.num})"><i class="ti ti-lock-open"></i> Reabrir</button>
+          <button class="btn btn-sm" style="font-size:11px;color:#A32D2D;border-color:#A32D2D" onclick="borrarTurno('${p.k}',${p.num})"><i class="ti ti-trash"></i></button>
+        </div>`:''}
+      </div>`;
+    }).join('');
+
     el.innerHTML = `
-      <div class="metrics">
-        <div class="metric"><div class="metric-val">${pStr(T.num)}</div><div class="metric-lbl">Planilla actual</div></div>
-        <div class="metric"><div class="metric-val">$${totalHoy.toLocaleString('es-AR',{maximumFractionDigits:0})}</div><div class="metric-lbl">Vendido hoy</div></div>
-        <div class="metric"><div class="metric-val">${Object.keys(cerrados).length}</div><div class="metric-lbl">Turnos cerrados (total)</div></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn btn-sm" onclick="admFk='${prevFk}';renderAdmContent()" ${esPrimerDia?'disabled':''}><i class="ti ti-chevron-left"></i></button>
+          <strong style="font-size:15px">${fkDisplay(fk)}</strong>
+          <button class="btn btn-sm" onclick="admFk='${nextFk}';renderAdmContent()" ${esHoy?'disabled':''}><i class="ti ti-chevron-right"></i></button>
+        </div>
+        ${!esHoy?`<button class="btn btn-sm btn-primary" onclick="admFk=null;renderAdmContent()"><i class="ti ti-calendar"></i> Hoy</button>`:'<span style="font-size:12px;color:#27500A;font-weight:500">● Hoy</span>'}
       </div>
-      <div class="card"><div class="section-title"><i class="ti ti-history"></i> Últimos turnos cerrados</div>
-      <div class="table-wrap"><table><thead><tr><th>Planilla</th><th>Fecha</th><th>Turno</th><th>Cerró</th><th>Total</th><th>Diferencia</th></tr></thead><tbody>
-      ${lista.map(c=>`<tr><td>${pStr(c.planilla)}</td><td>${c.fecha}</td><td><span class="badge badge-${c.turno}">${c.turno}</span></td><td>${c.cerradoPor}</td><td>$${c.totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td class="${c.diferencia<0?'diff-bad':'diff-ok'}">${c.diferencia<0?'-':c.diferencia>0?'+':''}$${Math.abs(c.diferencia).toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#9ca3af">Todavía no hay turnos cerrados</td></tr>'}
-      </tbody></table></div></div>`;
+      <div class="metrics">
+        <div class="metric"><div class="metric-val">${turnosCerradosDia}<span style="font-size:14px;color:#9ca3af">/3</span></div><div class="metric-lbl">Turnos cerrados</div></div>
+        <div class="metric"><div class="metric-val">$${totalVendidoDia.toLocaleString('es-AR',{maximumFractionDigits:0})}</div><div class="metric-lbl">Total vendido</div></div>
+        <div class="metric"><div class="metric-val">${litrosVendidosDia.toLocaleString('es-AR',{maximumFractionDigits:0})} L</div><div class="metric-lbl">Litros vendidos</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${turnoCards}</div>`;
   } else if(admSection==='turnos'){
     const cerrados = await fbLoad('turnosCerrados') || {};
     const lista = Object.values(cerrados).sort((a,b)=>b.planilla-a.planilla);
@@ -982,6 +1044,51 @@ function imprimirTurno(numPlanilla){
     </body></html>`);
   win.document.close();
   setTimeout(()=>win.print(), 400);
+}
+
+function reabrirTurno(k, num){
+  document.getElementById('modal').innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal">
+        <h2><i class="ti ti-lock-open"></i> ¿Reabrir turno?</h2>
+        <p>La planilla <strong>${pStr(num)}</strong> volverá a estar abierta para editar. La podés volver a cerrar cuando termines la corrección.</p>
+        <div class="modal-btns">
+          <button class="btn" onclick="document.getElementById('modal').innerHTML=''">Cancelar</button>
+          <button class="btn btn-primary" onclick="confirmarReabrir('${k}')">Reabrir</button>
+        </div>
+      </div>
+    </div>`;
+}
+async function confirmarReabrir(k){
+  const cerrados = await fbLoad('turnosCerrados') || {};
+  delete cerrados[k];
+  await fbSave('turnosCerrados', cerrados);
+  turnosCerrados = cerrados;
+  document.getElementById('modal').innerHTML='';
+  toast('✓ Turno reabierto','success');
+  renderAdmContent();
+}
+function borrarTurno(k, num){
+  document.getElementById('modal').innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal">
+        <h2 style="color:#A32D2D"><i class="ti ti-trash"></i> ¿Borrar turno?</h2>
+        <p>Se eliminará por completo la planilla <strong>${pStr(num)}</strong> — lecturas, precios, pagos y cuenta corriente de ese turno. No se puede deshacer.</p>
+        <div class="modal-btns">
+          <button class="btn" onclick="document.getElementById('modal').innerHTML=''">Cancelar</button>
+          <button class="btn btn-danger" onclick="confirmarBorrar('${k}')">Borrar todo</button>
+        </div>
+      </div>
+    </div>`;
+}
+async function confirmarBorrar(k){
+  const cerrados = await fbLoad('turnosCerrados') || {};
+  delete cerrados[k];
+  await fbSave('turnosCerrados', cerrados);
+  turnosCerrados = cerrados;
+  document.getElementById('modal').innerHTML='';
+  toast('Turno eliminado','error');
+  renderAdmContent();
 }
 
 async function toggleBloqueo(uid){
