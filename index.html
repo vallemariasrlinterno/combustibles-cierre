@@ -601,7 +601,7 @@ function renderOperador(){
     const inicialClass = hayError ? 'campo-error' : (m.inicial!=null?'campo-cargado':'campo-vacio');
     const finalClass = hayError ? 'campo-error' : (m.final!=null?'campo-cargado':'campo-vacio');
     html+=`<tr class="${filaClass}">
-      <td>${p.pico}</td>
+      <td><strong>Pico ${p.pico}</strong></td>
       <td style="border-left:4px solid ${color}"><span class="producto-dot" style="background:${color}"></span><span style="color:${color};font-weight:600">${p.producto}</span></td>
       <td><input class="medicion-input ${inicialClass}" type="number" step="0.1" placeholder="000000" value="${m.inicial??''}" ${cerrado?'disabled':''} onchange="actualizarMedicion('${m.id}','inicial',this.value)"></td>
       <td><input class="medicion-input ${finalClass}" type="number" step="0.1" placeholder="000000" value="${m.final??''}" ${cerrado?'disabled':''} onchange="actualizarMedicion('${m.id}','final',this.value)"></td>
@@ -832,7 +832,7 @@ function imprimirTurno(numPlanilla){
   const filasMediciones = PICOS.map(p=>{
     const m = c.mediciones.find(x=>x.pico===p.pico);
     const litros = (m.final!=null && m.inicial!=null) ? Math.max(0,(m.final-m.inicial)) : 0;
-    return `<tr><td>${p.surtidor}</td><td>${p.cara}</td><td>${p.pico}</td><td>${p.producto}</td><td style="text-align:right">${m.inicial??'—'}</td><td style="text-align:right">${m.final??'—'}</td><td style="text-align:right">${litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td></tr>`;
+    return `<tr><td>${p.surtidor}</td><td>${p.cara}</td><td>Pico ${p.pico}</td><td>${p.producto}</td><td style="text-align:right">${m.inicial??'—'}</td><td style="text-align:right">${m.final??'—'}</td><td style="text-align:right">${litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td></tr>`;
   }).join('');
   const filasProductos = c.porProducto.map(p=>`<tr><td>${p.producto}</td><td style="text-align:right">$${(c.precios[p.producto]||0).toLocaleString('es-AR')}</td><td style="text-align:right">${p.litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td><td style="text-align:right">$${p.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>`).join('');
   const filasPagos = MEDIOS_PAGO.map(m=>`<tr><td>${m.label}</td><td style="text-align:right">$${(c.pagos[m.id]||0).toLocaleString('es-AR')}</td></tr>`).join('');
