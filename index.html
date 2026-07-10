@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Combustibles · Cierre de Turno</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;min-height:100vh;color:#1a1a1a}
+.screen{display:none}.screen.active{display:block}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:1rem 1.25rem;margin-bottom:1rem}
+.container{max-width:980px;margin:0 auto;padding:1rem;padding-bottom:100px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#1a1a1a;cursor:pointer;font-size:14px;font-family:inherit;transition:background .15s}
+.btn:hover{background:#f3f4f6}.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-primary{background:#185FA5;color:#fff;border-color:#185FA5}.btn-primary:hover{background:#0C447C}
+.btn-green{background:#3B6D11;color:#fff;border-color:#3B6D11}.btn-green:hover{background:#27500A}
+.btn-danger{background:#A32D2D;color:#fff;border-color:#A32D2D}.btn-danger:hover{background:#791F1F}
+.btn-sm{padding:5px 10px;font-size:12px}.btn-block{width:100%;justify-content:center}
+label{font-size:13px;color:#6b7280;display:block;margin-top:10px;margin-bottom:3px}
+input,select{width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#1a1a1a;font-family:inherit;font-size:14px;outline:none}
+input:focus,select:focus{border-color:#185FA5;box-shadow:0 0 0 3px rgba(24,95,165,.1)}
+input:disabled{background:#f3f4f6;color:#9ca3af}
+.badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600}
+.badge-mañana{background:#E6F1FB;color:#0C447C}
+.badge-tarde{background:#FAEEDA;color:#633806}
+.badge-noche{background:#EEEDFE;color:#3C3489}
+.badge-admin{background:#EAF3DE;color:#27500A}
+.badge-operador{background:#FEF3C7;color:#92400E}
+.badge-ok{background:#EAF3DE;color:#27500A}
+.badge-out{background:#FCEBEB;color:#A32D2D}
+.alert{padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:1rem;display:flex;align-items:center;gap:8px}
+.alert-info{background:#E6F1FB;color:#0C447C}
+.alert-success{background:#EAF3DE;color:#27500A}
+.alert-danger{background:#FCEBEB;color:#A32D2D}
+.alert-warning{background:#FAEEDA;color:#633806}
+.tab-bar{display:flex;gap:4px;margin-bottom:1rem;background:#f3f4f6;border-radius:10px;padding:4px}
+.tab{flex:1;padding:7px 4px;text-align:center;border-radius:8px;cursor:pointer;font-size:13px;border:none;background:transparent;color:#6b7280;transition:all .15s;font-family:inherit}
+.tab.active{background:#fff;color:#1a1a1a;font-weight:500;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.table-wrap{overflow-x:auto;border-radius:12px;border:1px solid #e5e7eb}
+table{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+th{text-align:left;padding:10px 12px;color:#6b7280;border-bottom:1px solid #e5e7eb;font-weight:500;white-space:nowrap;background:#f9fafb}
+td{padding:9px 12px;border-bottom:1px solid #f3f4f6;color:#1a1a1a;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;padding:1rem 1.25rem;background:#fff;border-radius:12px;border:1px solid #e5e7eb;flex-wrap:wrap;gap:10px}
+.logo{font-size:18px;font-weight:600}.logo span{color:#185FA5}
+.header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:1rem}
+.metric{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:.875rem;text-align:center}
+.metric-val{font-size:20px;font-weight:600}.metric-lbl{font-size:11px;color:#6b7280;margin-top:3px}
+.login-wrap{max-width:380px;margin:3rem auto;padding:0 1rem}
+.section-title{font-size:15px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.surtidor-group{margin-bottom:1rem}
+.surtidor-title{font-size:13px;font-weight:700;color:#185FA5;background:#E6F1FB;padding:6px 12px;border-radius:8px 8px 0 0}
+.medicion-input{width:100%;padding:7px 8px;font-size:13px;text-align:right}
+.litros-badge{font-weight:700;color:#27500A}
+.precio-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:.5rem}
+.precio-box label{margin-top:0}
+.total-line{display:flex;justify-content:space-between;padding:8px 0;font-size:14px;border-bottom:1px solid #f3f4f6}
+.total-line:last-child{border-bottom:none}
+.total-line.grand{font-weight:700;font-size:16px;padding-top:12px;border-top:2px solid #1a1a1a}
+.pago-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.diff-ok{color:#27500A;font-weight:700}
+.diff-bad{color:#A32D2D;font-weight:700}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:200;padding:1rem}
+.modal{background:#fff;border-radius:16px;padding:1.5rem;max-width:460px;width:100%;text-align:center;max-height:90vh;overflow-y:auto}
+.modal h2{font-size:18px;font-weight:600;margin-bottom:.5rem}
+.modal p{font-size:13px;color:#6b7280;margin-bottom:1.25rem;line-height:1.6}
+.modal-btns{display:flex;gap:8px;justify-content:center}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(40px);background:#1a1a1a;color:#fff;padding:10px 22px;border-radius:999px;font-size:13px;opacity:0;transition:all .3s;z-index:300;pointer-events:none;white-space:nowrap}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.success{background:#3B6D11}#toast.error{background:#A32D2D}
+@media(max-width:600px){.header{flex-direction:column;align-items:flex-start}th,td{padding:7px 8px;font-size:12px}}
+</style>
+<!-- Firebase REST config -->
+<script>
+// Mismo proyecto Firebase que Stock Nochero, colección propia "combustible"
+const FB_PROJECT = 'nochero-stock';
+const FB_API_KEY = 'AIzaSyBnuu5MZYI_E8qKWGjgEpjX638lzYK_nMY';
+const FB_BASE = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents/combustible`;
+const FB_BASE_NOCHERO = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents/nochero`;
+
+async function fbSave(docName, data, base){
+  base = base || FB_BASE;
+  try{
+    const url = `${base}/${docName}?key=${FB_API_KEY}&updateMask.fieldPaths=data&updateMask.fieldPaths=updatedAt`;
+    const body = { fields: { data: { stringValue: JSON.stringify(data) }, updatedAt: { integerValue: String(Date.now()) } } };
+    const res = await fetch(url, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if(!res.ok) console.warn('fbSave error:', await res.json());
+  } catch(e){ console.warn('fbSave error:', e); }
+}
+async function fbLoad(docName, base){
+  base = base || FB_BASE;
+  try{
+    const url = `${base}/${docName}?key=${FB_API_KEY}`;
+    const res = await fetch(url);
+    if(res.status===404) return null;
+    if(!res.ok) return null;
+    const json = await res.json();
+    const val = json?.fields?.data?.stringValue;
+    return val ? JSON.parse(val) : null;
+  } catch(e){ console.warn('fbLoad error:', e); return null; }
+}
+</script>
+</head>
+<body>
+<div id="toast"></div>
+<div id="modal"></div>
+
+<!-- ═══════════════ LOGIN ═══════════════ -->
+<div id="screen-login" class="screen active">
+  <div class="login-wrap">
+    <div class="card">
+      <div class="logo" style="text-align:center;margin-bottom:1rem">⛽ Combustibles <span>· Cierre</span></div>
+      <div id="login-msg"></div>
+      <label>Usuario</label>
+      <select id="sel-user"><option value="">— Seleccioná —</option></select>
+      <label>Contraseña</label>
+      <input type="password" id="inp-pass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+      <div style="margin-top:1rem">
+        <button class="btn btn-primary btn-block" onclick="doLogin()"><i class="ti ti-login"></i> Entrar</button>
+      </div>
+    </div>
+    <div id="login-info" style="text-align:center;font-size:13px;color:#6b7280;margin-top:1rem;line-height:1.8"></div>
+  </div>
+</div>
+
+<!-- ═══════════════ OPERADOR ═══════════════ -->
+<div id="screen-operador" class="screen">
+  <div class="container">
+    <div class="header">
+      <div class="logo">⛽ Combustibles <span>· Cierre</span></div>
+      <div class="header-right">
+        <span id="op-user-badge" class="badge badge-operador"></span>
+        <button class="btn btn-sm" onclick="doLogout()"><i class="ti ti-logout"></i> Salir</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div id="op-planilla-info" style="font-size:14px"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-title"><i class="ti ti-currency-dollar"></i> Precio por litro</div>
+      <div class="precio-row" id="precios-wrap"></div>
+      <div style="text-align:right"><button class="btn btn-sm btn-primary" onclick="guardarPrecios()"><i class="ti ti-device-floppy"></i> Guardar precios</button></div>
+    </div>
+
+    <div class="card">
+      <div class="section-title"><i class="ti ti-gauge"></i> Lectura de surtidores</div>
+      <div id="mediciones-wrap"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-title"><i class="ti ti-report-money"></i> Totales de combustible</div>
+      <div id="totales-wrap"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-title"><i class="ti ti-credit-card"></i> Cierre de caja — medios de pago</div>
+      <div class="pago-grid" id="pagos-wrap"></div>
+      <div style="margin-top:1rem" id="diferencia-wrap"></div>
+    </div>
+
+    <button class="btn btn-green btn-block" onclick="confirmarCierre()"><i class="ti ti-lock"></i> Cerrar e informar turno</button>
+  </div>
+</div>
+
+<!-- ═══════════════ ADMIN ═══════════════ -->
+<div id="screen-admin" class="screen">
+  <div class="container">
+    <div class="header">
+      <div class="logo">⛽ Combustibles <span>· Admin</span></div>
+      <div class="header-right">
+        <span id="adm-user-badge" class="badge badge-admin"></span>
+        <button class="btn btn-sm" onclick="doLogout()"><i class="ti ti-logout"></i> Salir</button>
+      </div>
+    </div>
+    <div class="tab-bar">
+      <button class="tab active" onclick="showAdm('resumen',this)"><i class="ti ti-chart-bar"></i> Resumen</button>
+      <button class="tab" onclick="showAdm('turnos',this)"><i class="ti ti-history"></i> Turnos cerrados</button>
+      <button class="tab" onclick="showAdm('usuarios',this)"><i class="ti ti-users"></i> Usuarios</button>
+    </div>
+    <div id="adm-content"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// CONFIGURACIÓN — mismo algoritmo de planilla que Stock Nochero
+// ═══════════════════════════════════════════════════
+const START_YEAR=2026, START_MONTH=5, START_DAY=13; // jun=5 (0-indexed)
+const START_TI=1; // tarde
+const P0=19186;
+const FK_INICIO='2026-06-13';
+const TURNOS=['mañana','tarde','noche'];
+
+const USERS=[
+  {id:'franco', name:'Franco', role:'admin',    cargo:'Administrador', pass:'franco123', refuerzo:false},
+  {id:'sergio', name:'Sergio', role:'operador', cargo:'Jefe de Turno', pass:'sergio123', refuerzo:false},
+  {id:'elias',  name:'Elías',  role:'operador', cargo:'Jefe de Turno', pass:'elias123',  refuerzo:false},
+  {id:'luciano',name:'Luciano',role:'operador', cargo:'Jefe de Turno', pass:'luciano123',refuerzo:false},
+  {id:'gabi',   name:'Gabi',   role:'operador', cargo:'Jefe de Turno', pass:'gabi123',   refuerzo:false},
+  {id:'eitan',  name:'Eitan',  role:'operador', cargo:'Refuerzo',      pass:'eitan123',  refuerzo:true},
+  {id:'anibal', name:'Aníbal', role:'operador', cargo:'Refuerzo',      pass:'anibal123', refuerzo:true},
+  {id:'agus',   name:'Agus',   role:'operador', cargo:'Refuerzo',      pass:'agus123',   refuerzo:true},
+];
+
+// Estructura fija de surtidores / caras / picos — un producto por pico
+const PICOS = [
+  {pico:1,  surtidor:1, cara:1, producto:'Nafta Super'},
+  {pico:2,  surtidor:1, cara:1, producto:'V-Power Nafta'},
+  {pico:3,  surtidor:1, cara:1, producto:'Nafta Super C'},
+  {pico:4,  surtidor:1, cara:2, producto:'Nafta Super'},
+  {pico:5,  surtidor:1, cara:2, producto:'V-Power Nafta'},
+  {pico:6,  surtidor:1, cara:2, producto:'Nafta Super C'},
+  {pico:7,  surtidor:2, cara:1, producto:'V-Power Diesel'},
+  {pico:8,  surtidor:2, cara:1, producto:'Evolux'},
+  {pico:9,  surtidor:2, cara:2, producto:'V-Power Diesel'},
+  {pico:10, surtidor:2, cara:2, producto:'Evolux'},
+  {pico:11, surtidor:3, cara:1, producto:'V-Power Diesel'},
+  {pico:12, surtidor:3, cara:1, producto:'Evolux'},
+  {pico:13, surtidor:3, cara:2, producto:'V-Power Diesel'},
+  {pico:14, surtidor:3, cara:2, producto:'Evolux'},
+  {pico:15, surtidor:4, cara:1, producto:'Kerosene'},
+  {pico:16, surtidor:4, cara:2, producto:'Kerosene'},
+];
+const PRODUCTOS = ['Nafta Super','V-Power Nafta','Nafta Super C','V-Power Diesel','Evolux','Kerosene'];
+const MEDIOS_PAGO = [
+  {id:'efectivo', label:'Efectivo'},
+  {id:'tarjetaPlaya', label:'Tarjeta de Playa'},
+  {id:'tarjetaShop', label:'Tarjeta Shop'},
+  {id:'pagosElectronicos', label:'Pagos Electrónicos'},
+  {id:'cheque', label:'Cheque'},
+  {id:'cuentaCorriente', label:'Cuenta Corriente'},
+];
+
+function slug(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_');}
+
+function mediicionesVacias(){
+  return PICOS.map(p=>({id:`p${p.pico}`, pico:p.pico, surtidor:p.surtidor, cara:p.cara, producto:p.producto, inicial:null, final:null}));
+}
+
+// ═══════════════════════════════════════════════════
+// FECHA / TURNO (idéntico algoritmo a Stock Nochero)
+// ═══════════════════════════════════════════════════
+function ahoraAR(){
+  const now=new Date();
+  const utc=now.getTime()+now.getTimezoneOffset()*60000;
+  const ar=new Date(utc-3*3600000);
+  const y=ar.getFullYear(), mo=String(ar.getMonth()+1).padStart(2,'0'), d=String(ar.getDate()).padStart(2,'0');
+  const h=ar.getHours(), mi=String(ar.getMinutes()).padStart(2,'0');
+  return {fk:`${y}-${mo}-${d}`, hora:h, min:ar.getMinutes(), hhmm:`${String(h).padStart(2,'0')}:${mi}`};
+}
+function diffDiasFk(fk1, fk2){
+  const d1=new Date(fk1+'T12:00:00'), d2=new Date(fk2+'T12:00:00');
+  return Math.round((d2-d1)/86400000);
+}
+function planillaNum(diffDays, ti){
+  if(diffDays===0){ if(ti<START_TI) return null; return P0+(ti-START_TI); }
+  const turnosDia0=3-START_TI;
+  return P0+turnosDia0+(diffDays-1)*3+ti;
+}
+function turnoActual(){
+  const ar=ahoraAR();
+  let ti=ar.hora>=7&&ar.hora<15?0:ar.hora>=15&&ar.hora<23?1:2;
+  let fk=ar.fk;
+  if(ar.hora<7){
+    const d=new Date(fk+'T12:00:00'); d.setDate(d.getDate()-1);
+    fk=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    ti=2;
+  }
+  const diff=diffDiasFk(FK_INICIO, fk);
+  const num=planillaNum(diff,ti);
+  const fecha=new Date(fk+'T12:00:00').toLocaleDateString('es-AR');
+  return {fk,ti,diff,num,nombre:TURNOS[ti],fecha,hora:ar.hhmm};
+}
+function pStr(n){return n?'#'+String(n).padStart(5,'0'):'—';}
+
+const T = turnoActual(); // calculado una vez al cargar
+
+// ═══════════════════════════════════════════════════
+// ESTADO / SESIÓN
+// ═══════════════════════════════════════════════════
+let currentUser=null;
+let precios={}; // {producto:number}
+let mediciones=mediicionesVacias();
+let pagos={efectivo:null,tarjetaPlaya:null,tarjetaShop:null,pagosElectronicos:null,cheque:null,cuentaCorriente:null};
+let turnosCerrados={};
+let bloqueados={eitan:true}; // default: Eitan bloqueado en esta app
+
+function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById('screen-'+id).classList.add('active');}
+function toast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.className='show '+(type||'');setTimeout(()=>t.className='',2600);}
+
+document.addEventListener('DOMContentLoaded', async ()=>{
+  const sel=document.getElementById('sel-user');
+  USERS.forEach(u=>{const o=document.createElement('option');o.value=u.id;o.textContent=u.name+(u.role==='admin'?' (Admin)':'');sel.appendChild(o);});
+  document.getElementById('login-info').innerHTML=
+    `<strong style="font-size:15px;color:#1a1a1a">${T.hora} hs</strong><br>Turno <strong>${T.nombre}</strong> · ${T.fecha}<br>Planilla <strong>${pStr(T.num)}</strong>`;
+  const b = await fbLoad('bloqueados');
+  if(b) bloqueados = b;
+});
+
+// ═══════════════════════════════════════════════════
+// LOGIN
+// ═══════════════════════════════════════════════════
+async function doLogin(){
+  const uid=document.getElementById('sel-user').value;
+  const pass=document.getElementById('inp-pass').value;
+  if(!uid||!pass){document.getElementById('login-msg').innerHTML='<div class="alert alert-danger"><i class="ti ti-alert-circle"></i> Completá todos los campos.</div>';return;}
+  document.getElementById('login-msg').innerHTML='<div class="alert alert-info"><i class="ti ti-refresh"></i> Verificando...</div>';
+
+  const [fbPasses, fbBloqueados] = await Promise.all([
+    fbLoad('passes', FB_BASE_NOCHERO), // misma fuente de contraseñas que Stock Nochero
+    fbLoad('bloqueados')
+  ]);
+  const passes = fbPasses || {};
+  bloqueados = fbBloqueados || bloqueados;
+
+  const user = USERS.find(u=>u.id===uid && (passes[u.id]||u.pass)===pass);
+  if(!user){document.getElementById('login-msg').innerHTML='<div class="alert alert-danger"><i class="ti ti-alert-circle"></i> Usuario o contraseña incorrectos.</div>';return;}
+  if(bloqueados[uid]){document.getElementById('login-msg').innerHTML='<div class="alert alert-danger" style="font-size:15px;font-weight:700;justify-content:center;padding:1rem"><i class="ti ti-ban"></i> NO AUTORIZADO</div>';return;}
+
+  currentUser=user;
+  document.getElementById('inp-pass').value='';
+  document.getElementById('login-msg').innerHTML='';
+
+  await cargarEstadoTurno();
+
+  if(user.role==='admin'){
+    document.getElementById('adm-user-badge').textContent=user.name+' · Admin';
+    showScreen('admin'); showAdm('resumen', document.querySelector('.tab'));
+  } else {
+    document.getElementById('op-user-badge').textContent=user.name+' · '+user.cargo;
+    showScreen('operador');
+    renderOperador();
+  }
+}
+function doLogout(){currentUser=null;showScreen('login');}
+
+// ═══════════════════════════════════════════════════
+// CARGA / GUARDADO DE ESTADO
+// ═══════════════════════════════════════════════════
+async function cargarEstadoTurno(){
+  const [cerrados, draft, preciosGuardados] = await Promise.all([
+    fbLoad('turnosCerrados'), fbLoad('draftActual'), fbLoad('precios')
+  ]);
+  turnosCerrados = cerrados || {};
+  if(preciosGuardados) precios = preciosGuardados;
+  else PRODUCTOS.forEach(p=>precios[p]=precios[p]||0);
+
+  const key=`T${T.num}`;
+  if(turnosCerrados[key]){
+    // el turno ya fue cerrado por otro usuario
+    mediciones = turnosCerrados[key].mediciones;
+    pagos = turnosCerrados[key].pagos;
+  } else if(draft && draft[key]){
+    mediciones = draft[key].mediciones || mediicionesVacias();
+    pagos = draft[key].pagos || pagos;
+    if(draft[key].precios) precios = draft[key].precios;
+  } else {
+    mediciones = mediicionesVacias();
+  }
+}
+
+async function guardarDraft(){
+  const key=`T${T.num}`;
+  const draft = await fbLoad('draftActual') || {};
+  draft[key] = {mediciones, pagos, precios, user:currentUser?.name, fecha:T.fecha, turno:T.nombre};
+  await fbSave('draftActual', draft);
+}
+
+async function guardarPrecios(){
+  PRODUCTOS.forEach(p=>{
+    const v=parseFloat(document.getElementById('precio_'+slug(p)).value)||0;
+    precios[p]=v;
+  });
+  await fbSave('precios', precios);
+  toast('✓ Precios guardados','success');
+  renderTotales();
+}
+
+// ═══════════════════════════════════════════════════
+// RENDER — OPERADOR
+// ═══════════════════════════════════════════════════
+function renderOperador(){
+  const cerrado = !!turnosCerrados[`T${T.num}`];
+  document.getElementById('op-planilla-info').innerHTML =
+    `Planilla <strong>${pStr(T.num)}</strong> · Turno <strong>${T.nombre}</strong> · ${T.fecha}` +
+    (cerrado ? ` <span class="badge badge-out" style="margin-left:8px"><i class="ti ti-lock"></i> Cerrada</span> <button class="btn btn-sm" style="margin-left:8px" onclick="imprimirTurno(${T.num})"><i class="ti ti-file-download"></i> Exportar PDF</button>` : ` <span class="badge badge-ok" style="margin-left:8px">Abierta</span>`);
+
+  // Precios
+  document.getElementById('precios-wrap').innerHTML = PRODUCTOS.map(p=>`
+    <div class="precio-box">
+      <label>${p}</label>
+      <input type="number" step="0.01" id="precio_${slug(p)}" value="${precios[p]||''}" ${cerrado?'disabled':''} onchange="renderTotales()">
+    </div>`).join('');
+
+  // Mediciones agrupadas por surtidor, una fila por pico
+  let html='';
+  let surActual=null;
+  PICOS.forEach(p=>{
+    if(p.surtidor!==surActual){
+      if(surActual!==null) html+='</tbody></table></div></div>';
+      surActual=p.surtidor;
+      html+=`<div class="surtidor-group"><div class="surtidor-title">Surtidor ${p.surtidor}</div><div class="table-wrap"><table>
+        <thead><tr><th>Cara</th><th>Pico</th><th>Producto</th><th>Inicial</th><th>Final</th><th>Litros</th></tr></thead><tbody>`;
+    }
+    const m = mediciones.find(x=>x.pico===p.pico);
+    const litros = (m.final!=null && m.inicial!=null) ? Math.max(0,(m.final-m.inicial)) : 0;
+    html+=`<tr>
+      <td>${p.cara}</td>
+      <td>${p.pico}</td>
+      <td>${p.producto}</td>
+      <td><input class="medicion-input" type="number" step="0.1" value="${m.inicial??''}" ${cerrado?'disabled':''} onchange="actualizarMedicion('${m.id}','inicial',this.value)"></td>
+      <td><input class="medicion-input" type="number" step="0.1" value="${m.final??''}" ${cerrado?'disabled':''} onchange="actualizarMedicion('${m.id}','final',this.value)"></td>
+      <td class="litros-badge">${litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td>
+    </tr>`;
+  });
+  html+='</tbody></table></div></div>';
+  document.getElementById('mediciones-wrap').innerHTML=html;
+
+  // Pagos
+  document.getElementById('pagos-wrap').innerHTML = MEDIOS_PAGO.map(m=>`
+    <div>
+      <label>${m.label}</label>
+      <input type="number" step="0.01" id="pago_${m.id}" value="${pagos[m.id]??''}" ${cerrado?'disabled':''} onchange="actualizarPago('${m.id}',this.value)">
+    </div>`).join('');
+
+  renderTotales();
+}
+
+function actualizarMedicion(id, campo, val){
+  const m = mediciones.find(x=>x.id===id);
+  m[campo] = val===''?null:parseFloat(val);
+  guardarDraft();
+  renderTotales();
+  // repintar solo litros de esa fila sin perder foco de otros inputs
+  renderOperador();
+}
+function actualizarPago(id, val){
+  pagos[id] = val===''?null:parseFloat(val);
+  guardarDraft();
+  renderTotales();
+}
+
+function calcularTotales(){
+  const porProducto = PRODUCTOS.map(prod=>{
+    const litros = mediciones.filter(m=>m.producto===prod)
+      .reduce((s,m)=> s + ((m.final!=null && m.inicial!=null) ? Math.max(0,m.final-m.inicial) : 0), 0);
+    const precio = precios[prod]||0;
+    return {producto:prod, litros, importe: litros*precio};
+  });
+  const totalCombustibles = porProducto.reduce((s,p)=>s+p.importe,0);
+  const totalPagos = MEDIOS_PAGO.reduce((s,m)=>s+(pagos[m.id]||0),0);
+  return {porProducto, totalCombustibles, totalPagos, diferencia: totalPagos - totalCombustibles};
+}
+
+function renderTotales(){
+  PRODUCTOS.forEach(p=>{
+    const el=document.getElementById('precio_'+slug(p));
+    if(el) precios[p]=parseFloat(el.value)||precios[p]||0;
+  });
+  const {porProducto, totalCombustibles, totalPagos, diferencia} = calcularTotales();
+  document.getElementById('totales-wrap').innerHTML =
+    porProducto.map(p=>`<div class="total-line"><span>${p.producto} (${p.litros.toLocaleString('es-AR',{maximumFractionDigits:1})} L)</span><span>$${p.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>`).join('')
+    + `<div class="total-line grand"><span>TOTAL COMBUSTIBLES</span><span>$${totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>`;
+
+  const diffClass = Math.abs(diferencia)<1 ? 'diff-ok' : 'diff-bad';
+  document.getElementById('diferencia-wrap').innerHTML =
+    `<div class="total-line"><span>Total medios de pago</span><span>$${totalPagos.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>
+     <div class="total-line grand"><span>Diferencia de caja</span><span class="${diffClass}">$${diferencia.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>`;
+}
+
+async function confirmarCierre(){
+  const {totalCombustibles, totalPagos, diferencia, porProducto} = calcularTotales();
+  document.getElementById('modal').innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal">
+        <h2><i class="ti ti-lock"></i> Confirmar cierre</h2>
+        <p>Planilla <strong>${pStr(T.num)}</strong> · Turno <strong>${T.nombre}</strong> · ${T.fecha}<br><br>
+        Total combustibles: <strong>$${totalCombustibles.toLocaleString('es-AR')}</strong><br>
+        Total medios de pago: <strong>$${totalPagos.toLocaleString('es-AR')}</strong><br>
+        Diferencia de caja: <strong>$${diferencia.toLocaleString('es-AR')}</strong><br><br>
+        Esta acción no se puede deshacer. ¿Confirmás el cierre?</p>
+        <div class="modal-btns">
+          <button class="btn" onclick="document.getElementById('modal').innerHTML=''">Cancelar</button>
+          <button class="btn btn-green" onclick="cerrarTurno()">Confirmar cierre</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function cerrarTurno(){
+  const {porProducto, totalCombustibles, totalPagos, diferencia} = calcularTotales();
+  const cerrados = await fbLoad('turnosCerrados') || {};
+  cerrados[`T${T.num}`] = {
+    planilla:T.num, fecha:T.fecha, turno:T.nombre, cerradoPor:currentUser.name, hora:ahoraAR().hhmm,
+    mediciones, precios: {...precios}, pagos: {...pagos}, porProducto, totalCombustibles, totalPagos, diferencia
+  };
+  await fbSave('turnosCerrados', cerrados);
+  turnosCerrados = cerrados;
+  document.getElementById('modal').innerHTML='';
+  toast('✓ Turno '+pStr(T.num)+' cerrado','success');
+  renderOperador();
+}
+
+// ═══════════════════════════════════════════════════
+// ADMIN
+// ═══════════════════════════════════════════════════
+let admSection='resumen';
+function showAdm(sec, el){
+  admSection=sec;
+  document.querySelectorAll('#screen-admin .tab').forEach(t=>t.classList.remove('active'));
+  if(el) el.classList.add('active');
+  renderAdmContent();
+}
+async function renderAdmContent(){
+  const el=document.getElementById('adm-content');
+  if(admSection==='resumen'){
+    const cerrados = await fbLoad('turnosCerrados') || {};
+    turnosCerrados = cerrados;
+    const lista = Object.values(cerrados).sort((a,b)=>b.planilla-a.planilla).slice(0,10);
+    const totalHoy = Object.values(cerrados).filter(c=>c.fecha===T.fecha).reduce((s,c)=>s+c.totalCombustibles,0);
+    el.innerHTML = `
+      <div class="metrics">
+        <div class="metric"><div class="metric-val">${pStr(T.num)}</div><div class="metric-lbl">Planilla actual</div></div>
+        <div class="metric"><div class="metric-val">$${totalHoy.toLocaleString('es-AR',{maximumFractionDigits:0})}</div><div class="metric-lbl">Vendido hoy</div></div>
+        <div class="metric"><div class="metric-val">${Object.keys(cerrados).length}</div><div class="metric-lbl">Turnos cerrados (total)</div></div>
+      </div>
+      <div class="card"><div class="section-title"><i class="ti ti-history"></i> Últimos turnos cerrados</div>
+      <div class="table-wrap"><table><thead><tr><th>Planilla</th><th>Fecha</th><th>Turno</th><th>Cerró</th><th>Total</th><th>Diferencia</th></tr></thead><tbody>
+      ${lista.map(c=>`<tr><td>${pStr(c.planilla)}</td><td>${c.fecha}</td><td><span class="badge badge-${c.turno}">${c.turno}</span></td><td>${c.cerradoPor}</td><td>$${c.totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td class="${Math.abs(c.diferencia)<1?'diff-ok':'diff-bad'}">$${c.diferencia.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#9ca3af">Todavía no hay turnos cerrados</td></tr>'}
+      </tbody></table></div></div>`;
+  } else if(admSection==='turnos'){
+    const cerrados = await fbLoad('turnosCerrados') || {};
+    const lista = Object.values(cerrados).sort((a,b)=>b.planilla-a.planilla);
+    el.innerHTML = `<div class="card"><div class="table-wrap"><table><thead><tr><th>Planilla</th><th>Fecha</th><th>Turno</th><th>Cerró</th><th>Hora</th><th>Combustibles</th><th>Pagos</th><th>Diferencia</th><th></th></tr></thead><tbody>
+      ${lista.map(c=>`<tr><td>${pStr(c.planilla)}</td><td>${c.fecha}</td><td><span class="badge badge-${c.turno}">${c.turno}</span></td><td>${c.cerradoPor}</td><td>${c.hora}</td><td>$${c.totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td>$${c.totalPagos.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td class="${Math.abs(c.diferencia)<1?'diff-ok':'diff-bad'}">$${c.diferencia.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td><button class="btn btn-sm" onclick="imprimirTurno(${c.planilla})"><i class="ti ti-file-download"></i> PDF</button></td></tr>`).join('') || '<tr><td colspan="9" style="text-align:center;color:#9ca3af">Sin turnos cerrados todavía</td></tr>'}
+    </tbody></table></div></div>`;
+  } else if(admSection==='usuarios'){
+    const b = await fbLoad('bloqueados') || bloqueados;
+    bloqueados = b;
+    el.innerHTML = `<div class="card"><p style="font-size:13px;color:#6b7280;margin-bottom:1rem">Bloqueo propio de esta app (no afecta Stock Nochero). Las contraseñas se administran desde Stock Nochero.</p>
+      <div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Cargo</th><th>Estado</th><th></th></tr></thead><tbody>
+      ${USERS.map(u=>`<tr><td>${u.name}</td><td>${u.cargo}</td><td>${bloqueados[u.id]?'<span class="badge badge-out">Bloqueado</span>':'<span class="badge badge-ok">Habilitado</span>'}</td><td><button class="btn btn-sm" onclick="toggleBloqueo('${u.id}')">${bloqueados[u.id]?'Habilitar':'Bloquear'}</button></td></tr>`).join('')}
+      </tbody></table></div></div>`;
+  }
+}
+// ═══════════════════════════════════════════════════
+// EXPORTAR PDF (vía impresión del navegador)
+// ═══════════════════════════════════════════════════
+function imprimirTurno(numPlanilla){
+  const c = turnosCerrados[`T${numPlanilla}`];
+  if(!c){toast('Turno no encontrado','error');return;}
+  const filasMediciones = PICOS.map(p=>{
+    const m = c.mediciones.find(x=>x.pico===p.pico);
+    const litros = (m.final!=null && m.inicial!=null) ? Math.max(0,(m.final-m.inicial)) : 0;
+    return `<tr><td>${p.surtidor}</td><td>${p.cara}</td><td>${p.pico}</td><td>${p.producto}</td><td style="text-align:right">${m.inicial??'—'}</td><td style="text-align:right">${m.final??'—'}</td><td style="text-align:right">${litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td></tr>`;
+  }).join('');
+  const filasProductos = c.porProducto.map(p=>`<tr><td>${p.producto}</td><td style="text-align:right">$${(c.precios[p.producto]||0).toLocaleString('es-AR')}</td><td style="text-align:right">${p.litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td><td style="text-align:right">$${p.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>`).join('');
+  const filasPagos = MEDIOS_PAGO.map(m=>`<tr><td>${m.label}</td><td style="text-align:right">$${(c.pagos[m.id]||0).toLocaleString('es-AR')}</td></tr>`).join('');
+  const win = window.open('','_blank');
+  win.document.write(`
+    <html><head><title>Planilla ${pStr(numPlanilla)}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:24px;color:#1a1a1a;font-size:13px}
+      h1{font-size:18px;margin-bottom:2px}h2{font-size:14px;margin:18px 0 6px}
+      table{width:100%;border-collapse:collapse;margin-bottom:12px}
+      th,td{border:1px solid #ccc;padding:5px 8px;font-size:12px}
+      th{background:#f3f4f6;text-align:left}
+      .meta{color:#555;margin-bottom:14px}
+      .tot{font-weight:700}
+      @media print{.no-print{display:none}}
+    </style></head><body>
+    <h1>⛽ Combustibles — Planilla ${pStr(numPlanilla)}</h1>
+    <div class="meta">Turno <strong>${c.turno}</strong> · ${c.fecha} · Cerró: <strong>${c.cerradoPor}</strong> a las ${c.hora}</div>
+    <h2>Lectura de surtidores</h2>
+    <table><thead><tr><th>Surtidor</th><th>Cara</th><th>Pico</th><th>Producto</th><th>Inicial</th><th>Final</th><th>Litros</th></tr></thead><tbody>${filasMediciones}</tbody></table>
+    <h2>Totales por producto</h2>
+    <table><thead><tr><th>Producto</th><th>Precio/L</th><th>Litros</th><th>Importe</th></tr></thead><tbody>${filasProductos}
+    <tr class="tot"><td colspan="3">TOTAL COMBUSTIBLES</td><td style="text-align:right">$${c.totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr></tbody></table>
+    <h2>Medios de pago</h2>
+    <table><thead><tr><th>Medio</th><th>Importe</th></tr></thead><tbody>${filasPagos}
+    <tr class="tot"><td>TOTAL PAGOS</td><td style="text-align:right">$${c.totalPagos.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
+    <tr class="tot"><td>DIFERENCIA DE CAJA</td><td style="text-align:right">$${c.diferencia.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr></tbody></table>
+    <button class="no-print" onclick="window.print()" style="padding:8px 16px;margin-top:10px">Imprimir / Guardar PDF</button>
+    </body></html>`);
+  win.document.close();
+  setTimeout(()=>win.print(), 400);
+}
+
+async function toggleBloqueo(uid){
+  bloqueados[uid] = !bloqueados[uid];
+  await fbSave('bloqueados', bloqueados);
+  toast('✓ Actualizado','success');
+  renderAdmContent();
+}
+</script>
+</body>
+</html>
