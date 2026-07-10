@@ -57,7 +57,7 @@ tr:last-child td{border-bottom:none}
 .login-card h1{font-size:19px;font-weight:700;margin-bottom:1rem}
 .section-title{font-size:15px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
 .surtidor-group{margin-bottom:1rem}
-.surtidor-title{font-size:13px;font-weight:700;color:#185FA5;background:#E6F1FB;padding:6px 12px;border-radius:8px 8px 0 0}
+.surtidor-title{font-size:20px;font-weight:800;color:#0C447C;background:#E6F1FB;padding:12px 16px;border-radius:10px 10px 0 0;letter-spacing:-.3px;display:flex;align-items:center;gap:8px;border-bottom:2px solid #185FA5}
 .cara-header-row td{background:#EFF3F8!important;color:#185FA5;font-weight:800;font-size:12px;padding:7px 12px!important;text-transform:uppercase;letter-spacing:.5px;border-top:3px solid #185FA5!important;border-bottom:1px solid #d7e6f5!important}
 .fila-cara-par{background:#fafbfc}
 .fila-cara-impar{background:#fff}
@@ -586,7 +586,7 @@ function renderOperador(){
       if(surActual!==null) html+='</tbody></table></div></div>';
       surActual=p.surtidor;
       caraActual=null;
-      html+=`<div class="surtidor-group"><div class="surtidor-title">Surtidor ${p.surtidor}</div><div class="table-wrap"><table>
+      html+=`<div class="surtidor-group"><div class="surtidor-title"><i class="ti ti-gas-station"></i> Surtidor ${p.surtidor}</div><div class="table-wrap"><table>
         <thead><tr><th>Pico</th><th>Producto</th><th>Inicial</th><th>Final</th><th>Litros</th></tr></thead><tbody>`;
     }
     if(p.cara!==caraActual){
