@@ -574,8 +574,8 @@ function renderCuentaCorriente(cerrado){
       <div><label>Fecha</label><input type="date" id="cc-fecha" value="${T.fk}"></div>
       <div><label>Producto</label><select id="cc-producto">${PRODUCTOS.filter(p=>p!=='Kerosene').map(p=>`<option value="${p}">${p}</option>`).join('')}</select></div>
       <div><label>Cliente</label><input type="text" id="cc-cliente" placeholder="NOMBRE" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
-      <div><label>Litros</label><input type="text" inputmode="decimal" id="cc-litros" placeholder="Ej: 21,82" oninput="onLitrosInput(this)" onblur="formatearLitrosBlur(this)"></div>
-      <div><label>Importe ($)</label><input type="text" inputmode="numeric" id="cc-importe" placeholder="Ej: 89.000" oninput="onMilesInput(this)" onblur="if(this.value)this.value=formatMiles(parseInt(this.value,10))"></div>
+      <div><label>Litros</label><input type="text" inputmode="decimal" id="cc-litros" placeholder="Ej: 21,82" oninput="onLitrosInput(this)" onblur="formatearLitrosBlur(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></div>
+      <div><label>Importe ($)</label><input type="text" inputmode="numeric" id="cc-importe" placeholder="Ej: 89.000" oninput="onMilesInput(this)" onblur="if(this.value)this.value=formatMiles(parseInt(this.value,10))" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></div>
       <div><button class="btn btn-primary btn-block" onclick="agregarCuentaCorriente()"><i class="ti ti-plus"></i> Agregar</button></div>
     </div>`}
     <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Litros</th><th>Cliente</th><th>Producto</th><th>Importe</th><th></th></tr></thead><tbody>
@@ -605,7 +605,7 @@ function renderOperador(){
         <span class="peso-sign">$</span>
         <input type="text" inputmode="numeric" class="${filled?'campo-cargado':'campo-vacio'}" id="precio_${slug(p)}"
           placeholder="0.000" value="${filled?formatMiles(precios[p]):''}" ${disabled?'disabled':''}
-          oninput="onPrecioInput(this)" onblur="onPrecioBlur('${p}',this)">
+          oninput="onPrecioInput(this)" onblur="onPrecioBlur('${p}',this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
       </div>
       ${esKerosene && !cerrado ? `<button class="btn btn-sm" style="margin-top:6px;width:100%;${kerosenoActivo?'background:#EAF3DE;border-color:#3B6D11;color:#27500A':''}" onclick="toggleKeroseno()"><i class="ti ti-${kerosenoActivo?'toggle-right':'toggle-left'}"></i> Kerosene ${kerosenoActivo?'ACTIVO — tocá para desactivar':'inactivo — tocá para activar'}</button>` : ''}
     </div>`;
@@ -643,8 +643,8 @@ function renderOperador(){
     html+=`<tr class="${filaClass}">
       <td><strong>Pico ${p.pico}</strong></td>
       <td style="border-left:4px solid ${color}"><span class="producto-dot" style="background:${color}"></span><span style="color:${color};font-weight:600">${p.producto}</span></td>
-      <td><input class="medicion-input ${inicialClass}" type="text" inputmode="numeric" maxlength="6" placeholder="000000" value="${inactivo?'':(m.inicial!=null?String(m.inicial).padStart(6,'0'):'')}" ${disabledInput?'disabled':''} oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6)" onblur="actualizarMedicion('${m.id}','inicial',this)"></td>
-      <td><input class="medicion-input ${finalClass}" type="text" inputmode="numeric" maxlength="6" placeholder="000000" value="${inactivo?'':(m.final!=null?String(m.final).padStart(6,'0'):'')}" ${disabledInput?'disabled':''} oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6)" onblur="actualizarMedicion('${m.id}','final',this)"></td>
+      <td><input class="medicion-input ${inicialClass}" type="text" inputmode="numeric" maxlength="6" placeholder="000000" value="${inactivo?'':(m.inicial!=null?String(m.inicial).padStart(6,'0'):'')}" ${disabledInput?'disabled':''} oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6)" onblur="actualizarMedicion('${m.id}','inicial',this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></td>
+      <td><input class="medicion-input ${finalClass}" type="text" inputmode="numeric" maxlength="6" placeholder="000000" value="${inactivo?'':(m.final!=null?String(m.final).padStart(6,'0'):'')}" ${disabledInput?'disabled':''} oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6)" onblur="actualizarMedicion('${m.id}','final',this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></td>
       <td class="litros-badge">${inactivo?'—':litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td>
     </tr>`;
   });
@@ -668,7 +668,7 @@ function renderOperador(){
       <div class="precio-input-wrap"><span class="peso-sign">$</span>
       <input type="text" inputmode="numeric" class="${filled?'campo-cargado':'campo-vacio'}" id="pago_${m.id}" placeholder="0"
         value="${filled?formatMiles(pagos[m.id]):''}" ${cerrado?'disabled':''}
-        oninput="onMilesInput(this)" onblur="actualizarPago('${m.id}',this)"></div>
+        oninput="onMilesInput(this)" onblur="actualizarPago('${m.id}',this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></div>
     </div>`;
   }).join('');
 
