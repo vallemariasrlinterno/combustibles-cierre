@@ -706,10 +706,6 @@ function calcularTotales(){
 }
 
 function renderTotales(){
-  PRODUCTOS.forEach(p=>{
-    const el=document.getElementById('precio_'+slug(p));
-    if(el) precios[p]=parseFloat(el.value)||precios[p]||0;
-  });
   const {porProducto, totalCombustibles, totalPagos, diferencia} = calcularTotales();
   document.getElementById('totales-wrap').innerHTML =
     porProducto.map(p=>{
