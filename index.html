@@ -428,17 +428,24 @@ async function guardarPrecios(){
   toast('✓ Precios guardados','success');
 }
 
-// Formato de precio: $ + miles con punto (ej. 1500 -> "1.500")
+// Formato de miles: $ + punto (ej. 1500 -> "1.500"). Reutilizable en cualquier campo NO de aforador.
 function formatMiles(n){ return Math.round(n).toLocaleString('es-AR'); }
-function onPrecioInput(el){
+// Mientras se escribe: solo dígitos, sin puntos (el empleado nunca tipea el separador)
+function onMilesInput(el){
   el.value = el.value.replace(/[^0-9]/g,'');
 }
-function onPrecioBlur(prod, el){
+// Al salir del campo: formatea con separador de miles y devuelve el número crudo
+function leerYFormatearMiles(el){
   const raw = el.value.replace(/[^0-9]/g,'');
   const n = raw ? parseInt(raw,10) : 0;
-  precios[prod]=n;
   if(n>0){ el.value=formatMiles(n); el.classList.remove('campo-vacio'); el.classList.add('campo-cargado'); }
   else { el.value=''; el.classList.add('campo-vacio'); el.classList.remove('campo-cargado'); }
+  return n;
+}
+function onPrecioInput(el){ onMilesInput(el); }
+function onPrecioBlur(prod, el){
+  const n = leerYFormatearMiles(el);
+  precios[prod]=n;
   guardarDraft();
   renderTotales();
   renderAvisosPrecios();
@@ -493,10 +500,10 @@ function agregarCuentaCorriente(){
   const fecha = document.getElementById('cc-fecha').value || T.fk;
   const cliente = document.getElementById('cc-cliente').value.trim().toUpperCase();
   const producto = document.getElementById('cc-producto').value;
-  const litrosRaw = document.getElementById('cc-litros').value;
-  const importeRaw = document.getElementById('cc-importe').value;
-  let litros = litrosRaw!==''? parseFloat(litrosRaw) : null;
-  let importe = importeRaw!==''? parseFloat(importeRaw) : null;
+  const litrosDigitos = document.getElementById('cc-litros').value.replace(/[^0-9]/g,'');
+  const importeDigitos = document.getElementById('cc-importe').value.replace(/[^0-9]/g,'');
+  let litros = litrosDigitos!==''? parseInt(litrosDigitos,10) : null;
+  let importe = importeDigitos!==''? parseInt(importeDigitos,10) : null;
 
   if(!fecha || !cliente || !producto){
     toast('Completá fecha, cliente y producto','error'); return;
@@ -544,8 +551,8 @@ function renderCuentaCorriente(cerrado){
       <div><label>Fecha</label><input type="date" id="cc-fecha" value="${T.fk}"></div>
       <div><label>Producto</label><select id="cc-producto">${PRODUCTOS.filter(p=>p!=='Kerosene').map(p=>`<option value="${p}">${p}</option>`).join('')}</select></div>
       <div><label>Cliente</label><input type="text" id="cc-cliente" placeholder="NOMBRE" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
-      <div><label>Litros</label><input type="number" step="0.1" id="cc-litros" placeholder="Ej: 70"></div>
-      <div><label>Importe ($)</label><input type="number" step="0.01" id="cc-importe" placeholder="Ej: 89.000"></div>
+      <div><label>Litros</label><input type="text" inputmode="numeric" id="cc-litros" placeholder="Ej: 70" oninput="onMilesInput(this)" onblur="if(this.value)this.value=formatMiles(parseInt(this.value,10))"></div>
+      <div><label>Importe ($)</label><input type="text" inputmode="numeric" id="cc-importe" placeholder="Ej: 89.000" oninput="onMilesInput(this)" onblur="if(this.value)this.value=formatMiles(parseInt(this.value,10))"></div>
       <div><button class="btn btn-primary btn-block" onclick="agregarCuentaCorriente()"><i class="ti ti-plus"></i> Agregar</button></div>
     </div>`}
     <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Litros</th><th>Cliente</th><th>Producto</th><th>Importe</th><th></th></tr></thead><tbody>
@@ -626,15 +633,19 @@ function renderOperador(){
   renderCuentaCorriente(cerrado);
   syncCuentaCorriente();
 
-  // Pagos — Cuenta Corriente queda automática/computada, el resto manual
+  // Pagos — Cuenta Corriente queda automática/computada, el resto manual con separador de miles
   document.getElementById('pagos-wrap').innerHTML = MEDIOS_PAGO.map(m=>{
     if(m.id==='cuentaCorriente'){
       return `<div><label>${m.label} <span style="font-weight:400;color:#9ca3af">(automático)</span></label>
         <input type="text" value="$${(pagos.cuentaCorriente||0).toLocaleString('es-AR',{maximumFractionDigits:0})}" disabled class="campo-cargado"></div>`;
     }
+    const filled = pagos[m.id] && pagos[m.id]>0;
     return `<div>
       <label>${m.label}</label>
-      <input type="number" step="0.01" id="pago_${m.id}" value="${pagos[m.id]??''}" ${cerrado?'disabled':''} onchange="actualizarPago('${m.id}',this.value)">
+      <div class="precio-input-wrap"><span class="peso-sign">$</span>
+      <input type="text" inputmode="numeric" class="${filled?'campo-cargado':'campo-vacio'}" id="pago_${m.id}" placeholder="0"
+        value="${filled?formatMiles(pagos[m.id]):''}" ${cerrado?'disabled':''}
+        oninput="onMilesInput(this)" onblur="actualizarPago('${m.id}',this)"></div>
     </div>`;
   }).join('');
 
@@ -698,8 +709,9 @@ function actualizarMedicion(id, campo, val){
   // repintar solo litros de esa fila sin perder foco de otros inputs
   renderOperador();
 }
-function actualizarPago(id, val){
-  pagos[id] = val===''?null:parseFloat(val);
+function actualizarPago(id, el){
+  const n = leerYFormatearMiles(el);
+  pagos[id] = n>0 ? n : null;
   guardarDraft();
   renderTotales();
 }
