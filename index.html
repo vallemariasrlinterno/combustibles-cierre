@@ -620,8 +620,8 @@ function renderOperador(){
     html+=`<tr class="${filaClass}">
       <td><strong>Pico ${p.pico}</strong></td>
       <td style="border-left:4px solid ${color}"><span class="producto-dot" style="background:${color}"></span><span style="color:${color};font-weight:600">${p.producto}</span></td>
-      <td><input class="medicion-input ${inicialClass}" type="number" step="0.1" placeholder="000000" value="${inactivo?'':(m.inicial??'')}" ${disabledInput?'disabled':''} onchange="actualizarMedicion('${m.id}','inicial',this.value)"></td>
-      <td><input class="medicion-input ${finalClass}" type="number" step="0.1" placeholder="000000" value="${inactivo?'':(m.final??'')}" ${disabledInput?'disabled':''} onchange="actualizarMedicion('${m.id}','final',this.value)"></td>
+      <td><input class="medicion-input ${inicialClass}" type="text" inputmode="numeric" maxlength="6" placeholder="000000" value="${inactivo?'':(m.inicial!=null?String(m.inicial).padStart(6,'0'):'')}" ${disabledInput?'disabled':''} oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6)" onblur="actualizarMedicion('${m.id}','inicial',this)"></td>
+      <td><input class="medicion-input ${finalClass}" type="text" inputmode="numeric" maxlength="6" placeholder="000000" value="${inactivo?'':(m.final!=null?String(m.final).padStart(6,'0'):'')}" ${disabledInput?'disabled':''} oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6)" onblur="actualizarMedicion('${m.id}','final',this)"></td>
       <td class="litros-badge">${inactivo?'—':litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td>
     </tr>`;
   });
@@ -701,12 +701,15 @@ function renderAvisosMediciones(cerrado){
   el.innerHTML = avisos.map(a=>`<div class="aviso-box aviso-${a.tipo}"><i class="ti ti-${a.tipo==='error'?'alert-circle':'alert-triangle'}"></i><span>${a.texto}</span></div>`).join('');
 }
 
-function actualizarMedicion(id, campo, val){
+function actualizarMedicion(id, campo, el){
+  const raw = el.value.replace(/[^0-9]/g,'');
+  const n = raw!=='' ? parseInt(raw,10) : null;
+  if(n!=null) el.value = String(n).padStart(6,'0');
   const m = mediciones.find(x=>x.id===id);
-  m[campo] = val===''?null:parseFloat(val);
+  m[campo] = n;
   guardarDraft();
   renderTotales();
-  // repintar solo litros de esa fila sin perder foco de otros inputs
+  // repintar toda la sección para reflejar el estado de error/cargado en la fila
   renderOperador();
 }
 function actualizarPago(id, el){
@@ -856,7 +859,7 @@ function imprimirTurno(numPlanilla){
   const filasMediciones = PICOS.map(p=>{
     const m = c.mediciones.find(x=>x.pico===p.pico);
     const litros = (m.final!=null && m.inicial!=null) ? Math.max(0,(m.final-m.inicial)) : 0;
-    return `<tr><td>${p.surtidor}</td><td>${p.cara}</td><td>Pico ${p.pico}</td><td>${p.producto}</td><td style="text-align:right">${m.inicial??'—'}</td><td style="text-align:right">${m.final??'—'}</td><td style="text-align:right">${litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td></tr>`;
+    return `<tr><td>${p.surtidor}</td><td>${p.cara}</td><td>Pico ${p.pico}</td><td>${p.producto}</td><td style="text-align:right">${m.inicial!=null?String(m.inicial).padStart(6,'0'):'—'}</td><td style="text-align:right">${m.final!=null?String(m.final).padStart(6,'0'):'—'}</td><td style="text-align:right">${litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td></tr>`;
   }).join('');
   const filasProductos = c.porProducto.map(p=>`<tr><td>${p.producto}</td><td style="text-align:right">$${(c.precios[p.producto]||0).toLocaleString('es-AR')}</td><td style="text-align:right">${p.litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td><td style="text-align:right">$${p.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>`).join('');
   const filasPagos = MEDIOS_PAGO.map(m=>`<tr><td>${m.label}</td><td style="text-align:right">$${(c.pagos[m.id]||0).toLocaleString('es-AR')}</td></tr>`).join('');
