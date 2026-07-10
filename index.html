@@ -177,7 +177,7 @@ async function fbLoad(docName, base){
     </div>
 
     <div class="card">
-      <div class="section-title"><i class="ti ti-gauge"></i> Lectura de surtidores</div>
+      <div class="section-title"><i class="ti ti-gauge"></i> Lectura de surtidores <span style="font-weight:400;color:#6b7280">— Aforadores mecánicos</span></div>
       <div id="mediciones-wrap"></div>
       <div id="avisos-mediciones-wrap"></div>
     </div>
@@ -854,7 +854,7 @@ function imprimirTurno(numPlanilla){
     </style></head><body>
     <h1>⛽ Combustibles Cierre — Planilla ${pStr(numPlanilla)}</h1>
     <div class="meta">Turno <strong>${c.turno}</strong> · ${c.fecha} · Cerró: <strong>${c.cerradoPor}</strong> a las ${c.hora}</div>
-    <h2>Lectura de surtidores</h2>
+    <h2>Lectura de surtidores — Aforadores mecánicos</h2>
     <table><thead><tr><th>Surtidor</th><th>Cara</th><th>Pico</th><th>Producto</th><th>Inicial</th><th>Final</th><th>Litros</th></tr></thead><tbody>${filasMediciones}</tbody></table>
     <h2>Totales por producto</h2>
     <table><thead><tr><th>Producto</th><th>Precio/L</th><th>Litros</th><th>Importe</th></tr></thead><tbody>${filasProductos}
