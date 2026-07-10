@@ -445,11 +445,32 @@ function syncCuentaCorriente(){ pagos.cuentaCorriente = sumCuentaCorriente(); }
 
 function agregarCuentaCorriente(){
   const fecha = document.getElementById('cc-fecha').value || T.fk;
-  const litros = parseFloat(document.getElementById('cc-litros').value)||0;
   const cliente = document.getElementById('cc-cliente').value.trim();
   const producto = document.getElementById('cc-producto').value;
-  const importe = parseFloat(document.getElementById('cc-importe').value)||0;
-  if(!cliente || !producto || importe<=0){ toast('Completá cliente, producto e importe','error'); return; }
+  const litrosRaw = document.getElementById('cc-litros').value;
+  const importeRaw = document.getElementById('cc-importe').value;
+  let litros = litrosRaw!==''? parseFloat(litrosRaw) : null;
+  let importe = importeRaw!==''? parseFloat(importeRaw) : null;
+
+  if(!fecha || !cliente || !producto){
+    toast('Completá fecha, cliente y producto','error'); return;
+  }
+  if((litros==null||isNaN(litros)) && (importe==null||isNaN(importe))){
+    toast('Cargá los litros o el importe en pesos','error'); return;
+  }
+  const precio = precios[producto]||0;
+  if(precio<=0){
+    toast(`${producto} todavía no tiene precio cargado — cargalo arriba primero`,'error'); return;
+  }
+  // Obligación: el combustible. El otro valor (litros o importe) se calcula automático.
+  if(litros!=null && !isNaN(litros) && (importe==null||isNaN(importe))){
+    importe = litros*precio;
+  } else if(importe!=null && !isNaN(importe) && (litros==null||isNaN(litros))){
+    litros = importe/precio;
+  }
+  if(litros==null||importe==null||isNaN(litros)||isNaN(importe)||litros<=0||importe<=0){
+    toast('Revisá los valores cargados','error'); return;
+  }
   cuentaCorriente.push({id:'cc'+Date.now(), fecha, litros, cliente, producto, importe});
   syncCuentaCorriente();
   guardarDraft();
@@ -472,12 +493,13 @@ function renderCuentaCorriente(cerrado){
   </tr>`).join('');
   const total = sumCuentaCorriente();
   document.getElementById('cc-wrap').innerHTML = `
-    ${cerrado?'':`<div class="cc-form">
+    ${cerrado?'':`<p style="font-size:12px;color:#6b7280;margin-bottom:.5rem"><i class="ti ti-info-circle"></i> Cargá <strong>litros</strong> o <strong>importe</strong> — el que falte se calcula solo según el precio del combustible. El producto es obligatorio.</p>
+    <div class="cc-form">
       <div><label>Fecha</label><input type="date" id="cc-fecha" value="${T.fk}"></div>
-      <div><label>Litros</label><input type="number" step="0.1" id="cc-litros" placeholder="0"></div>
-      <div><label>Cliente</label><input type="text" id="cc-cliente" placeholder="Nombre"></div>
       <div><label>Producto</label><select id="cc-producto">${PRODUCTOS.filter(p=>p!=='Kerosene').map(p=>`<option value="${p}">${p}</option>`).join('')}</select></div>
-      <div><label>Importe</label><input type="number" step="0.01" id="cc-importe" placeholder="0"></div>
+      <div><label>Cliente</label><input type="text" id="cc-cliente" placeholder="Nombre"></div>
+      <div><label>Litros</label><input type="number" step="0.1" id="cc-litros" placeholder="ej. 70"></div>
+      <div><label>Importe ($)</label><input type="number" step="0.01" id="cc-importe" placeholder="ej. 89250"></div>
       <div><button class="btn btn-primary btn-block" onclick="agregarCuentaCorriente()"><i class="ti ti-plus"></i> Agregar</button></div>
     </div>`}
     <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Litros</th><th>Cliente</th><th>Producto</th><th>Importe</th><th></th></tr></thead><tbody>
@@ -608,7 +630,33 @@ function renderTotales(){
      <div class="total-line grand"><span>Diferencia de caja</span><span class="${diffClass}">$${diferencia.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>`;
 }
 
+function validarCierre(){
+  const errores=[];
+  PRODUCTOS.forEach(p=>{
+    if(p==='Kerosene') return; // excepción: no se comercializa
+    if(!precios[p] || precios[p]<=0) errores.push(`Falta el precio de <strong>${p}</strong>`);
+  });
+  PICOS.forEach(p=>{
+    if(p.producto==='Kerosene') return; // excepción
+    const m = mediciones.find(x=>x.pico===p.pico);
+    if(m.inicial==null || m.final==null) errores.push(`Falta cargar el Pico ${p.pico} — ${p.producto} (Surtidor ${p.surtidor}, Cara ${p.cara})`);
+  });
+  return errores;
+}
+
 async function confirmarCierre(){
+  const errores = validarCierre();
+  if(errores.length){
+    document.getElementById('modal').innerHTML = `
+      <div class="modal-overlay">
+        <div class="modal">
+          <h2><i class="ti ti-alert-triangle" style="color:#A32D2D"></i> Faltan datos para cerrar</h2>
+          <p style="text-align:left">${errores.map(e=>'• '+e).join('<br>')}</p>
+          <div class="modal-btns"><button class="btn btn-primary" onclick="document.getElementById('modal').innerHTML=''">Entendido</button></div>
+        </div>
+      </div>`;
+    return;
+  }
   const {totalCombustibles, totalPagos, diferencia, porProducto} = calcularTotales();
   document.getElementById('modal').innerHTML = `
     <div class="modal-overlay">
@@ -628,6 +676,7 @@ async function confirmarCierre(){
 }
 
 async function cerrarTurno(){
+  if(validarCierre().length){ toast('Faltan datos, revisá el turno','error'); document.getElementById('modal').innerHTML=''; return; }
   const {porProducto, totalCombustibles, totalPagos, diferencia} = calcularTotales();
   const cerrados = await fbLoad('turnosCerrados') || {};
   cerrados[`T${T.num}`] = {
