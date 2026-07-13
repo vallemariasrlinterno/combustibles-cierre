@@ -201,6 +201,7 @@ async function fbLoad(docName, base){
 
     <div class="card">
       <div class="section-title"><i class="ti ti-gauge"></i> Lectura de surtidores <span style="font-weight:400;color:#6b7280">— Aforadores mecánicos</span></div>
+      <div style="background:#FAEEDA;color:#633806;border-radius:10px;padding:12px 16px;margin-bottom:1rem;font-size:16px;font-weight:800;display:flex;align-items:center;gap:10px"><i class="ti ti-arrow-right" style="font-size:20px"></i> De frente a cada surtidor, los picos deben leerse de IZQUIERDA a DERECHA</div>
       <div id="mediciones-wrap"></div>
       <div id="avisos-mediciones-wrap"></div>
     </div>
@@ -295,7 +296,7 @@ const PRODUCT_COLORS = {
 const MEDIOS_PAGO = [
   {id:'efectivo', label:'Efectivo'},
   {id:'pagosElectronicos', label:'Pagos Electrónicos (ShellBox / MP)'},
-  {id:'tarjetaPlaya', label:'Tarjeta de Playa'},
+  {id:'tarjetaPlaya', label:'Tarjeta Posnet Playa'},
   {id:'tarjetaSelect', label:'Tarjeta Select'},
   {id:'cheque', label:'Cheque'},
   {id:'cuentaCorriente', label:'Cuenta Corriente'},
@@ -652,7 +653,7 @@ function renderOperador(){
           placeholder="0.000" value="${filled?formatMiles(precios[p]):''}" ${disabled?'disabled':''}
           oninput="onPrecioInput(this)" onblur="onPrecioBlur('${p}',this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
       </div>
-      ${esKerosene && !cerrado ? `<button class="btn btn-sm" style="margin-top:6px;width:100%;${kerosenoActivo?'background:#EAF3DE;border-color:#3B6D11;color:#27500A':''}" onclick="toggleKeroseno()"><i class="ti ti-${kerosenoActivo?'toggle-right':'toggle-left'}"></i> Kerosene ${kerosenoActivo?'ACTIVO — tocá para desactivar':'inactivo — tocá para activar'}</button>` : ''}
+      ${esKerosene && !cerrado ? `<button class="btn btn-sm" style="margin-top:6px;width:100%;${kerosenoActivo?'background:#EAF3DE;border-color:#3B6D11;color:#27500A':'background:#FCEBEB;border-color:#A32D2D;color:#A32D2D'}" onclick="toggleKeroseno()"><i class="ti ti-${kerosenoActivo?'toggle-right':'toggle-left'}"></i> Kerosene ${kerosenoActivo?'ACTIVO — tocá para desactivar':'inactivo — tocá para activar'}</button>` : ''}
     </div>`;
   }).join('');
   renderAvisosPrecios();
@@ -668,7 +669,10 @@ function renderOperador(){
       caraActual=null;
       const esSurtidorKerosene = p.producto==='Kerosene';
       const badgeKerosene = esSurtidorKerosene ? `<span class="badge ${kerosenoActivo?'badge-ok':'badge-out'}" style="margin-left:auto;font-size:11px">${kerosenoActivo?'ACTIVO':'INACTIVO'}</span>${!cerrado?`<button class="btn btn-sm" style="background:#fff" onclick="toggleKeroseno()"><i class="ti ti-${kerosenoActivo?'toggle-right':'toggle-left'}"></i> ${kerosenoActivo?'Desactivar':'Activar'}</button>`:''}` : '';
-      html+=`<div class="surtidor-group"><div class="surtidor-title"><i class="ti ti-gas-station"></i> Surtidor ${p.surtidor}${badgeKerosene}</div><div class="table-wrap"><table>
+      const estiloKerosene = esSurtidorKerosene ? (kerosenoActivo
+        ? 'background:#EAF3DE;color:#27500A;border-bottom-color:#3B6D11'
+        : 'background:#FCEBEB;color:#A32D2D;border-bottom-color:#A32D2D') : '';
+      html+=`<div class="surtidor-group"><div class="surtidor-title" style="${estiloKerosene}"><i class="ti ti-gas-station"></i> Surtidor ${p.surtidor}${badgeKerosene}</div><div class="table-wrap"><table>
         <thead><tr><th>Pico</th><th>Producto</th><th>Inicial</th><th>Final</th><th>Litros</th></tr></thead><tbody>`;
     }
     if(p.cara!==caraActual){
@@ -827,7 +831,7 @@ function renderTotales(){
       <div class="precio-input-wrap"><span class="peso-sign">$</span>
         <input type="text" inputmode="numeric" class="${filled?'campo-cargado':'campo-vacio'}" id="pago_${m.id}" placeholder="0"
           value="${filled?formatMiles(pagos[m.id]):''}" ${cerrado?'disabled':''}
-          oninput="onMilesInput(this)" onblur="actualizarPago('${m.id}',this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+          oninput="onMilesInput(this)" onblur="actualizarPago('${m.id}',this)" onkeydown="if(event.key==='Enter'){event.preventDefault();const _id=this.id;this.blur();avanzarSiguientePago(_id);}">
       </div>
     </div>`;
   }).join('');
@@ -843,17 +847,18 @@ function renderTotales(){
   else if(diferencia>0){ estado='positivo'; signo='+'; }
   else { estado='negativo'; signo='-'; }
   const montoAbs = Math.abs(diferencia).toLocaleString('es-AR',{maximumFractionDigits:0});
-  const subtexto = estado==='cero' ? 'Caja exacta — perfecto' : estado==='positivo' ? 'Sobra efectivo respecto a lo esperado' : 'Falta efectivo respecto a lo esperado';
+  const subtexto = estado==='cero' ? 'Caja exacta — perfecto' : estado==='positivo' ? 'SOBRA efectivo' : 'FALTA efectivo';
 
   document.getElementById('cascada-wrap').innerHTML = `
     <div class="cascada">
       <div class="cascada-fila total-inicial"><span>Total Combustibles (Ventas)</span><span>$${totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>
       ${filasResta}
+      <div class="cascada-fila" style="font-weight:800;background:#f3f4f6;color:#374151"><span>TOTAL</span><span>$${totalNoEfectivo.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>
       <div class="cascada-fila resultado"><span>= Efectivo Esperado</span><span>$${efectivoEsperado.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>
     </div>
 
     <div class="efectivo-box">
-      <div class="efectivo-box-label"><i class="ti ti-cash"></i> Efectivo Ingresado (contado a mano)</div>
+      <div class="efectivo-box-label"><i class="ti ti-cash"></i> Efectivo (contado a mano)</div>
       <div class="precio-input-wrap" style="max-width:220px;margin:0 auto">
         <span class="peso-sign" style="font-size:16px">$</span>
         <input type="text" inputmode="numeric" class="${filledEfectivo?'campo-cargado':'campo-vacio'}" id="pago_efectivo" placeholder="0"
@@ -868,6 +873,17 @@ function renderTotales(){
       <div class="diff-hero-val">${signo}$${montoAbs}</div>
       <div class="diff-hero-sub">${subtexto}</div>
     </div>`;
+}
+
+// Enter en el cierre de caja: avanza en orden Pagos Electrónicos → Posnet Playa → Select → Cheque → Efectivo
+function avanzarSiguientePago(idActual){
+  const orden = ['pago_pagosElectronicos','pago_tarjetaPlaya','pago_tarjetaSelect','pago_cheque','pago_efectivo'];
+  const idx = orden.indexOf(idActual);
+  if(idx===-1) return;
+  for(let i=idx+1;i<orden.length;i++){
+    const el = document.getElementById(orden[i]);
+    if(el && !el.disabled){ el.focus(); el.select(); return; }
+  }
 }
 
 function validarCierre(){
@@ -1118,6 +1134,7 @@ function imprimirTurno(numPlanilla){
     <table><thead><tr><th>Concepto</th><th>Importe</th></tr></thead><tbody>
     <tr class="tot"><td>Total Combustibles (Ventas)</td><td style="text-align:right">$${c.totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
     ${filasResta}
+    <tr class="tot" style="background:#f3f4f6"><td>TOTAL</td><td style="text-align:right">$${totalNoEfectivoPdf.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
     <tr class="tot"><td>= Efectivo Esperado</td><td style="text-align:right">$${efectivoEsperadoPdf.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
     <tr><td>Efectivo Ingresado (contado a mano)</td><td style="text-align:right">$${(c.pagos.efectivo||0).toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
     <tr class="tot"><td>DIFERENCIA DE CAJA</td><td style="text-align:right">$${c.diferencia.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr></tbody></table>
