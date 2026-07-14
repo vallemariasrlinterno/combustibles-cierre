@@ -854,7 +854,6 @@ function renderTotales(){
       <div class="cascada-fila total-inicial"><span>Total Combustibles (Ventas)</span><span>$${totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>
       ${filasResta}
       <div class="cascada-fila" style="font-weight:800;background:#f3f4f6;color:#374151"><span>TOTAL</span><span>$${totalNoEfectivo.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>
-      <div class="cascada-fila resultado"><span>= Efectivo Esperado</span><span>$${efectivoEsperado.toLocaleString('es-AR',{maximumFractionDigits:0})}</span></div>
     </div>
 
     <div class="efectivo-box">
@@ -1150,7 +1149,6 @@ function imprimirTurno(numPlanilla){
     <tr class="tot"><td>Total Combustibles (Ventas)</td><td style="text-align:right">$${c.totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
     ${filasResta}
     <tr class="tot" style="background:#f3f4f6"><td>TOTAL</td><td style="text-align:right">$${totalNoEfectivoPdf.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
-    <tr class="tot"><td>= Efectivo Esperado</td><td style="text-align:right">$${efectivoEsperadoPdf.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
     <tr><td>Efectivo Ingresado (contado a mano)</td><td style="text-align:right">$${(c.pagos.efectivo||0).toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
     <tr class="tot"><td>DIFERENCIA DE CAJA</td><td style="text-align:right">$${c.diferencia.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr></tbody></table>
     ${cc.length ? `<h2>Cuenta corriente — venta a clientes</h2>
