@@ -917,10 +917,13 @@ async function confirmarCierre(){
   const {totalCombustibles, diferencia, porProducto} = calcularTotales();
   const totalNoEfectivo = MEDIOS_PAGO.filter(m=>m.id!=='efectivo').reduce((s,m)=>s+(pagos[m.id]||0),0);
   const efectivoEsperado = totalCombustibles - totalNoEfectivo;
+  const avisoEfectivo = (pagos.efectivo==null || pagos.efectivo<=0)
+    ? `<div style="background:#FCEBEB;color:#A32D2D;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;font-weight:700;text-align:left"><i class="ti ti-alert-triangle"></i> NO cargaste el Efectivo (contado a mano). Si cerrás así, va a quedar registrado un faltante por el total del efectivo esperado.</div>` : '';
   document.getElementById('modal').innerHTML = `
     <div class="modal-overlay">
       <div class="modal">
         <h2><i class="ti ti-lock"></i> Confirmar cierre</h2>
+        ${avisoEfectivo}
         <p>Planilla <strong>${pStr(T.num)}</strong> · Turno <strong>${T.nombre}</strong> · ${T.fecha}<br><br>
         Total combustibles: <strong>$${totalCombustibles.toLocaleString('es-AR')}</strong><br>
         Efectivo esperado: <strong>$${efectivoEsperado.toLocaleString('es-AR')}</strong><br>
@@ -939,11 +942,23 @@ async function cerrarTurno(){
   if(validarCierre().length){ toast('Faltan datos, revisá el turno','error'); document.getElementById('modal').innerHTML=''; return; }
   const {porProducto, totalCombustibles, totalPagos, diferencia} = calcularTotales();
   const cerrados = await fbLoad('turnosCerrados') || {};
+  if(cerrados[`T${T.num}`]){
+    // Otro usuario ya cerró este turno mientras esta pantalla estaba abierta: no pisar su cierre.
+    turnosCerrados = cerrados;
+    document.getElementById('modal').innerHTML='';
+    toast(`Este turno ya fue cerrado por ${cerrados[`T${T.num}`].cerradoPor}. Se recargó la pantalla.`,'error');
+    renderOperador();
+    return;
+  }
   cerrados[`T${T.num}`] = {
     planilla:T.num, fecha:T.fecha, fk:T.fk, turno:T.nombre, cerradoPor:currentUser.name, hora:ahoraAR().hhmm,
     mediciones, precios: {...precios}, pagos: {...pagos}, cuentaCorriente: [...cuentaCorriente], porProducto, totalCombustibles, totalPagos, diferencia
   };
   await fbSave('turnosCerrados', cerrados);
+  await fbSave('precios', precios); // el turno siguiente arranca con estos precios aunque nadie toque "Guardar precios"
+  const draftLimpio = await fbLoad('draftActual') || {};
+  delete draftLimpio[`T${T.num}`]; // el borrador de este turno ya no sirve: el dato definitivo quedó en turnosCerrados
+  await fbSave('draftActual', draftLimpio);
   turnosCerrados = cerrados;
   document.getElementById('modal').innerHTML='';
   toast('✓ Turno '+pStr(T.num)+' cerrado','success');
