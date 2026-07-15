@@ -180,6 +180,7 @@ async function fbLoad(docName, base){
 <!-- ═══════════════ OPERADOR ═══════════════ -->
 <div id="screen-operador" class="screen">
   <div class="container">
+    <div id="adm-mode-banner"></div>
     <div class="header">
       <div class="logo">⛽ Combustibles Cierre</div>
       <div class="header-right">
@@ -238,6 +239,7 @@ async function fbLoad(docName, base){
     <div class="tab-bar">
       <button class="tab active" onclick="showAdm('resumen',this)"><i class="ti ti-chart-bar"></i> Resumen</button>
       <button class="tab" onclick="showAdm('turnos',this)"><i class="ti ti-history"></i> Turnos cerrados</button>
+      <button class="tab" onclick="showAdm('cargar',this)"><i class="ti ti-pencil-plus"></i> Cargar turno</button>
       <button class="tab" onclick="showAdm('usuarios',this)"><i class="ti ti-users"></i> Usuarios</button>
     </div>
     <div id="adm-content"></div>
@@ -415,6 +417,27 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 // LOGIN
 // ═══════════════════════════════════════════════════
 // Selector de turno durante la ventana de cambio (5:45-7:15 / 13:45-15:15 / 21:45-23:15)
+// ═══ Admin: abrir cualquier planilla (desde el 10/7) para cargar, editar o reabrir ═══
+async function abrirPlanillaAdmin(fk, ti){
+  T = armarTurno(fk, ti);
+  document.getElementById('op-user-badge').textContent = currentUser.name+' · Admin';
+  await cargarEstadoTurno();
+  showScreen('operador');
+  renderOperador();
+}
+async function volverAlPanel(){
+  document.getElementById('adm-mode-banner').innerHTML='';
+  T = turnoActual();
+  await cargarEstadoTurno();
+  showScreen('admin');
+  renderAdmContent();
+}
+async function reabrirDesdeOperador(){
+  await confirmarReabrir(`T${T.num}`);
+  await cargarEstadoTurno();
+  renderOperador();
+}
+
 function mostrarSelectorTurno(v){
   showScreen('operador');
   document.getElementById('modal').innerHTML = `
@@ -694,10 +717,16 @@ function renderCuentaCorriente(cerrado){
 // ═══════════════════════════════════════════════════
 function renderOperador(){
   const cerrado = !!turnosCerrados[`T${T.num}`];
+  const esAdmin = currentUser?.role==='admin';
+  document.getElementById('adm-mode-banner').innerHTML = esAdmin ? `
+    <div style="background:#185FA5;color:#fff;border-radius:10px;padding:10px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <span style="font-weight:700;font-size:13.5px"><i class="ti ti-shield"></i> MODO ADMINISTRADOR — editando planilla ${pStr(T.num)} (${T.nombre} · ${T.fecha})</span>
+      <button class="btn btn-sm" style="background:#fff" onclick="volverAlPanel()"><i class="ti ti-arrow-left"></i> Volver al panel</button>
+    </div>` : '';
   document.getElementById('op-planilla-info').innerHTML =
     `Planilla <strong>${pStr(T.num)}</strong> · Turno <strong>${T.nombre}</strong> · ${T.fecha}` +
-    (cerrado ? ` <span class="badge badge-out" style="margin-left:8px"><i class="ti ti-lock"></i> Cerrada</span> <button class="btn btn-sm" style="margin-left:8px" onclick="imprimirTurno(${T.num})"><i class="ti ti-file-download"></i> Exportar PDF</button>` : ` <span class="badge badge-ok" style="margin-left:8px">Abierta</span>`) +
-    (ventanaCambio() ? ` <button class="btn btn-sm" style="margin-left:8px;color:#185FA5;border-color:#185FA5" onclick="reabrirSelector()"><i class="ti ti-arrows-exchange"></i> Cambiar turno</button>` : '');
+    (cerrado ? ` <span class="badge badge-out" style="margin-left:8px"><i class="ti ti-lock"></i> Cerrada</span> <button class="btn btn-sm" style="margin-left:8px" onclick="imprimirTurno(${T.num})"><i class="ti ti-file-download"></i> Exportar PDF</button>${esAdmin?` <button class="btn btn-sm" style="margin-left:8px;color:#185FA5;border-color:#185FA5" onclick="reabrirDesdeOperador()"><i class="ti ti-lock-open"></i> Reabrir para editar</button>`:''}` : ` <span class="badge badge-ok" style="margin-left:8px">Abierta</span>`) +
+    (ventanaCambio() && !esAdmin ? ` <button class="btn btn-sm" style="margin-left:8px;color:#185FA5;border-color:#185FA5" onclick="reabrirSelector()"><i class="ti ti-arrows-exchange"></i> Cambiar turno</button>` : '');
 
   // Precios — formateados con $ y separador de miles, color por producto, Kerosene bloqueado
   document.getElementById('precios-wrap').innerHTML = PRODUCTOS.map(p=>{
@@ -1134,6 +1163,52 @@ async function renderAdmContent(){
       `<div class="card"><div class="section-title"><i class="ti ti-clock"></i> Turnos cerrados</div><div class="table-wrap"><table><thead><tr><th>Planilla</th><th>Fecha</th><th>Turno</th><th>Cerró</th><th>Hora</th><th>Combustibles</th><th>Pagos</th><th>Diferencia</th><th></th></tr></thead><tbody>
       ${lista.map(c=>`<tr><td>${pStr(c.planilla)}</td><td>${c.fecha}</td><td><span class="badge badge-${c.turno}">${c.turno}</span></td><td>${c.cerradoPor}</td><td>${c.hora}</td><td>$${c.totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td>$${c.totalPagos.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td class="${c.diferencia<0?'diff-bad':'diff-ok'}">${c.diferencia<0?'-':c.diferencia>0?'+':''}$${Math.abs(c.diferencia).toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td><button class="btn btn-sm" onclick="imprimirTurno(${c.planilla})"><i class="ti ti-file-download"></i> PDF</button></td></tr>`).join('') || '<tr><td colspan="9" style="text-align:center;color:#9ca3af">Sin turnos cerrados todavía</td></tr>'}
     </tbody></table></div></div>`;
+  } else if(admSection==='cargar'){
+    const cerrados = await fbLoad('turnosCerrados') || {};
+    turnosCerrados = cerrados;
+    if(!window._cargarFk) window._cargarFk = T.fk;
+    const fk = window._cargarFk;
+    const FK_CARGA_MIN = '2026-07-10';
+    const numActual = turnoActual().num;
+    const planes = planillasDia(fk);
+    const filas = planes.map(p=>{
+      if(p.num===null) return '';
+      const c = cerrados[p.k];
+      const esFuturo = p.num > numActual;
+      let estado, accion;
+      if(c){
+        estado = `<span class="badge badge-out" style="background:#f3f4f6;color:#6b7280"><i class="ti ti-lock" style="font-size:9px"></i> cerrada por ${c.cerradoPor}</span>`;
+        accion = `<button class="btn btn-sm" onclick="abrirPlanillaAdmin('${fk}',${p.ti})"><i class="ti ti-eye"></i> Abrir (ver / reabrir)</button>`;
+      } else if(esFuturo){
+        estado = `<span class="badge" style="color:#9ca3af;background:#f3f4f6">○ no iniciada</span>`;
+        accion = `<span style="font-size:12px;color:#d1d5db">—</span>`;
+      } else if(p.num === numActual){
+        estado = `<span class="badge badge-ok">● en curso</span>`;
+        accion = `<button class="btn btn-sm btn-primary" onclick="abrirPlanillaAdmin('${fk}',${p.ti})"><i class="ti ti-pencil"></i> Abrir y editar</button>`;
+      } else {
+        estado = `<span class="badge badge-out"><i class="ti ti-alert-triangle" style="font-size:9px"></i> sin informar</span>`;
+        accion = `<button class="btn btn-sm btn-primary" onclick="abrirPlanillaAdmin('${fk}',${p.ti})"><i class="ti ti-pencil-plus"></i> Cargar planilla</button>`;
+      }
+      return `<tr><td>${pStr(p.num)}</td><td><span class="badge badge-${p.nombre}">${p.nombre}</span></td><td>${estado}</td><td style="text-align:right">${accion}</td></tr>`;
+    }).join('');
+    const day = new Date(fk+'T12:00:00');
+    const prev = new Date(day); prev.setDate(prev.getDate()-1);
+    const next = new Date(day); next.setDate(next.getDate()+1);
+    const prevFk = prev.getFullYear()+'-'+String(prev.getMonth()+1).padStart(2,'0')+'-'+String(prev.getDate()).padStart(2,'0');
+    const nextFk = next.getFullYear()+'-'+String(next.getMonth()+1).padStart(2,'0')+'-'+String(next.getDate()).padStart(2,'0');
+    const esMin = diffDiasFk(FK_CARGA_MIN, fk) <= 0;
+    const esHoy = fk===T.fk;
+    el.innerHTML = `<div class="card">
+      <div class="section-title"><i class="ti ti-pencil-plus"></i> Cargar / editar turnos <span style="font-weight:400;color:#6b7280">— desde el ${fkDisplay(FK_CARGA_MIN)}</span></div>
+      <p style="font-size:13px;color:#6b7280;margin-bottom:1rem">Elegí el día y abrí la planilla que quieras completar o corregir. Los turnos cerrados se pueden ver y reabrir para editar. La numeración de planillas se respeta automáticamente por fecha y turno.</p>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem;flex-wrap:wrap">
+        <button class="btn btn-sm" onclick="window._cargarFk='${prevFk}';renderAdmContent()" ${esMin?'disabled':''}><i class="ti ti-chevron-left"></i></button>
+        <input type="date" value="${fk}" min="${FK_CARGA_MIN}" max="${T.fk}" onchange="window._cargarFk=this.value;renderAdmContent()" style="width:auto;margin:0;padding:7px 10px;font-size:14px;font-weight:700">
+        <button class="btn btn-sm" onclick="window._cargarFk='${nextFk}';renderAdmContent()" ${esHoy?'disabled':''}><i class="ti ti-chevron-right"></i></button>
+        ${!esHoy?`<button class="btn btn-sm btn-primary" onclick="window._cargarFk=null;renderAdmContent()"><i class="ti ti-calendar"></i> Hoy</button>`:'<span style="font-size:12px;color:#27500A;font-weight:500">● Hoy</span>'}
+      </div>
+      <div class="table-wrap"><table><thead><tr><th>Planilla</th><th>Turno</th><th>Estado</th><th></th></tr></thead><tbody>${filas}</tbody></table></div>
+    </div>`;
   } else if(admSection==='usuarios'){
     const [b, passesData] = await Promise.all([ fbLoad('bloqueados'), fbLoad('passes', FB_BASE_NOCHERO) ]);
     bloqueados = b || bloqueados;
