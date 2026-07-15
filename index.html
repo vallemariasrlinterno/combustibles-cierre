@@ -785,6 +785,14 @@ function actualizarMedicion(id, campo, el){
   renderOperador();
 }
 function actualizarPago(id, el){
+  if(id==='ventaNochero'){
+    // Obligatorio informar: 0 explícito vale (queda 0), vacío = sin informar (null)
+    const raw = el.value.replace(/[^0-9]/g,'');
+    pagos.ventaNochero = raw==='' ? null : parseInt(raw,10);
+    guardarDraft();
+    renderTotales();
+    return;
+  }
   const n = leerYFormatearMiles(el);
   pagos[id] = n>0 ? n : null;
   guardarDraft();
@@ -842,7 +850,6 @@ function renderTotales(){
   const ventaNochero = pagos.ventaNochero||0;
   const diferencia = efectivoIngresado - ventaNochero - efectivoEsperado;
   const filledEfectivo = pagos.efectivo && pagos.efectivo>0;
-  const filledNochero = pagos.ventaNochero && pagos.ventaNochero>0;
 
   let estado, signo;
   if(Math.abs(diferencia)<1){ estado='cero'; signo=''; }
@@ -867,13 +874,13 @@ function renderTotales(){
           value="${filledEfectivo?formatMiles(pagos.efectivo):''}" ${cerrado?'disabled':''}
           oninput="onMilesInput(this)" onblur="actualizarPago('efectivo',this)" onkeydown="if(event.key==='Enter'){event.preventDefault();const _id=this.id;this.blur();avanzarSiguientePago(_id);}">
       </div>
-      <div style="margin-top:12px;padding-top:12px;border-top:1px dashed #185FA5">
-        <div style="font-size:12px;color:#0C447C;font-weight:700;margin-bottom:6px"><span class="cascada-signo">−</span>VENTA NOCHERO</div>
+      <div style="margin-top:12px;padding:12px;border-radius:10px;border:2px solid ${pagos.ventaNochero!=null?'#3B6D11':'#A32D2D'};background:${pagos.ventaNochero!=null?'#EAF3DE':'#FCEBEB'}">
+        <div style="font-size:12px;font-weight:800;margin-bottom:6px;color:${pagos.ventaNochero!=null?'#27500A':'#A32D2D'}"><span class="cascada-signo">−</span>VENTA NOCHERO ${pagos.ventaNochero!=null?'✓ informada':'⚠ SIN INFORMAR — obligatoria (cargá 0 si no hubo)'}</div>
         <div class="precio-input-wrap" style="max-width:180px;margin:0 auto">
           <span class="peso-sign">$</span>
-          <input type="text" inputmode="numeric" class="${filledNochero?'campo-cargado':'campo-vacio'}" id="pago_ventaNochero" placeholder="0"
-            style="text-align:center;padding-left:26px"
-            value="${filledNochero?formatMiles(pagos.ventaNochero):''}" ${cerrado?'disabled':''}
+          <input type="text" inputmode="numeric" class="${pagos.ventaNochero!=null?'campo-cargado':'campo-vacio'}" id="pago_ventaNochero" placeholder="0"
+            style="text-align:center;padding-left:26px;${pagos.ventaNochero==null?'border-color:#A32D2D':''}"
+            value="${pagos.ventaNochero!=null?formatMiles(pagos.ventaNochero):''}" ${cerrado?'disabled':''}
             oninput="onMilesInput(this)" onblur="actualizarPago('ventaNochero',this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
         </div>
       </div>
@@ -899,6 +906,7 @@ function avanzarSiguientePago(idActual){
 
 function validarCierre(){
   const errores=[];
+  if(pagos.ventaNochero==null) errores.push(`Falta informar la <strong>VENTA NOCHERO</strong> — es obligatoria, cargá <strong>0</strong> si no hubo venta`);
   PRODUCTOS.forEach(p=>{
     if(p==='Kerosene' && !kerosenoActivo) return; // excepción: inactivo, no se comercializa
     if(!precios[p] || precios[p]<=0) errores.push(`Falta el precio de <strong>${p}</strong>`);
