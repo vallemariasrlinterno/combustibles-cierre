@@ -377,7 +377,7 @@ const T = turnoActual(); // calculado una vez al cargar
 let currentUser=null;
 let precios={}; // {producto:number}
 let mediciones=mediicionesVacias();
-let pagos={efectivo:null,tarjetaPlaya:null,tarjetaSelect:null,pagosElectronicos:null,cheque:null,cuentaCorriente:0};
+let pagos={efectivo:null,tarjetaPlaya:null,tarjetaSelect:null,pagosElectronicos:null,cheque:null,cuentaCorriente:0,ventaNochero:null};
 let cuentaCorriente=[]; // {id,fecha,litros,cliente,producto,importe}
 let kerosenoActivo=false; // interruptor único: precio + Surtidor 4 (Cara 7/8). Persistente entre turnos.
 let turnosCerrados={};
@@ -801,7 +801,7 @@ function calcularTotales(){
   });
   const totalCombustibles = porProducto.reduce((s,p)=>s+p.importe,0);
   const totalPagos = MEDIOS_PAGO.reduce((s,m)=>s+(pagos[m.id]||0),0);
-  return {porProducto, totalCombustibles, totalPagos, diferencia: totalPagos - totalCombustibles};
+  return {porProducto, totalCombustibles, totalPagos, diferencia: totalPagos - totalCombustibles - (pagos.ventaNochero||0)};
 }
 
 function renderTotales(){
@@ -839,8 +839,10 @@ function renderTotales(){
   const totalNoEfectivo = noEfectivo.reduce((s,m)=>s+(pagos[m.id]||0),0);
   const efectivoEsperado = totalCombustibles - totalNoEfectivo;
   const efectivoIngresado = pagos.efectivo||0;
-  const diferencia = efectivoIngresado - efectivoEsperado;
+  const ventaNochero = pagos.ventaNochero||0;
+  const diferencia = efectivoIngresado - ventaNochero - efectivoEsperado;
   const filledEfectivo = pagos.efectivo && pagos.efectivo>0;
+  const filledNochero = pagos.ventaNochero && pagos.ventaNochero>0;
 
   let estado, signo;
   if(Math.abs(diferencia)<1){ estado='cero'; signo=''; }
@@ -863,7 +865,17 @@ function renderTotales(){
         <input type="text" inputmode="numeric" class="${filledEfectivo?'campo-cargado':'campo-vacio'}" id="pago_efectivo" placeholder="0"
           style="font-size:18px;font-weight:800;text-align:center;padding-left:30px"
           value="${filledEfectivo?formatMiles(pagos.efectivo):''}" ${cerrado?'disabled':''}
-          oninput="onMilesInput(this)" onblur="actualizarPago('efectivo',this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+          oninput="onMilesInput(this)" onblur="actualizarPago('efectivo',this)" onkeydown="if(event.key==='Enter'){event.preventDefault();const _id=this.id;this.blur();avanzarSiguientePago(_id);}">
+      </div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px dashed #185FA5">
+        <div style="font-size:12px;color:#0C447C;font-weight:600;margin-bottom:6px"><span class="cascada-signo">−</span>Venta Nochero <span style="font-weight:400;color:#6b7280">(minimercado — está en la caja pero no es combustible)</span></div>
+        <div class="precio-input-wrap" style="max-width:180px;margin:0 auto">
+          <span class="peso-sign">$</span>
+          <input type="text" inputmode="numeric" class="${filledNochero?'campo-cargado':'campo-vacio'}" id="pago_ventaNochero" placeholder="0"
+            style="text-align:center;padding-left:26px"
+            value="${filledNochero?formatMiles(pagos.ventaNochero):''}" ${cerrado?'disabled':''}
+            oninput="onMilesInput(this)" onblur="actualizarPago('ventaNochero',this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+        </div>
       </div>
     </div>
 
@@ -876,7 +888,7 @@ function renderTotales(){
 
 // Enter en el cierre de caja: avanza en orden Pagos Electrónicos → Posnet Playa → Select → Cheque → Efectivo
 function avanzarSiguientePago(idActual){
-  const orden = ['pago_pagosElectronicos','pago_tarjetaPlaya','pago_tarjetaSelect','pago_cheque','pago_efectivo'];
+  const orden = ['pago_pagosElectronicos','pago_tarjetaPlaya','pago_tarjetaSelect','pago_cheque','pago_efectivo','pago_ventaNochero'];
   const idx = orden.indexOf(idActual);
   if(idx===-1) return;
   for(let i=idx+1;i<orden.length;i++){
@@ -927,6 +939,7 @@ async function confirmarCierre(){
         Total combustibles: <strong>$${totalCombustibles.toLocaleString('es-AR')}</strong><br>
         Efectivo esperado: <strong>$${efectivoEsperado.toLocaleString('es-AR')}</strong><br>
         Efectivo ingresado: <strong>$${(pagos.efectivo||0).toLocaleString('es-AR')}</strong><br>
+        Venta Nochero (se resta): <strong>$${(pagos.ventaNochero||0).toLocaleString('es-AR')}</strong><br>
         Diferencia de caja: <strong>$${diferencia.toLocaleString('es-AR')}</strong><br><br>
         Esta acción no se puede deshacer. ¿Confirmás el cierre?</p>
         <div class="modal-btns">
@@ -1149,7 +1162,8 @@ function imprimirTurno(numPlanilla){
     <tr class="tot"><td>Total Combustibles (Ventas)</td><td style="text-align:right">$${c.totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
     ${filasResta}
     <tr class="tot" style="background:#f3f4f6"><td>TOTAL</td><td style="text-align:right">$${totalNoEfectivoPdf.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
-    <tr><td>Efectivo Ingresado (contado a mano)</td><td style="text-align:right">$${(c.pagos.efectivo||0).toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
+    <tr><td>Efectivo (contado a mano)</td><td style="text-align:right">$${(c.pagos.efectivo||0).toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
+    <tr><td>− Venta Nochero (minimercado)</td><td style="text-align:right">$${(c.pagos.ventaNochero||0).toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
     <tr class="tot"><td>DIFERENCIA DE CAJA</td><td style="text-align:right">$${c.diferencia.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr></tbody></table>
     ${cc.length ? `<h2>Cuenta corriente — venta a clientes</h2>
     <table><thead><tr><th>Fecha</th><th>Litros</th><th>Cliente</th><th>Producto</th><th>Importe</th></tr></thead><tbody>${filasCC}
