@@ -328,19 +328,35 @@ function planillaNum(diffDays, ti){
   const turnosDia0=3-START_TI;
   return P0+turnosDia0+(diffDays-1)*3+ti;
 }
-function turnoActual(){
-  const ar=ahoraAR();
-  let ti=ar.hora>=7&&ar.hora<15?0:ar.hora>=15&&ar.hora<23?1:2;
-  let fk=ar.fk;
-  if(ar.hora<7){
-    const d=new Date(fk+'T12:00:00'); d.setDate(d.getDate()-1);
-    fk=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    ti=2;
-  }
+function fkAyer(fk){
+  const d=new Date(fk+'T12:00:00'); d.setDate(d.getDate()-1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function armarTurno(fk, ti){
   const diff=diffDiasFk(FK_INICIO, fk);
   const num=planillaNum(diff,ti);
   const fecha=new Date(fk+'T12:00:00').toLocaleDateString('es-AR');
-  return {fk,ti,diff,num,nombre:TURNOS[ti],fecha,hora:ar.hhmm};
+  return {fk,ti,diff,num,nombre:TURNOS[ti],fecha,hora:ahoraAR().hhmm};
+}
+// Horarios formales: 6:00 / 14:00 / 22:00. Gracia para cerrar: hasta 1:15 después.
+// Cortes por defecto: 7:15 / 15:15 / 23:15.
+function turnoActual(){
+  const ar=ahoraAR();
+  const m=ar.hora*60+ar.min;
+  if(m < 435) return armarTurno(fkAyer(ar.fk), 2);   // antes de 7:15 -> noche de ayer
+  if(m < 915) return armarTurno(ar.fk, 0);           // hasta 15:15 -> mañana
+  if(m < 1395) return armarTurno(ar.fk, 1);          // hasta 23:15 -> tarde
+  return armarTurno(ar.fk, 2);                       // desde 23:15 -> noche
+}
+// Ventanas de cambio de turno: 5:45-7:15 / 13:45-15:15 / 21:45-23:15.
+// En ese lapso conviven el turno saliente (cerrando) y el entrante (arrancando).
+function ventanaCambio(){
+  const ar=ahoraAR();
+  const m=ar.hora*60+ar.min;
+  if(m>=345 && m<435)  return {saliente:armarTurno(fkAyer(ar.fk),2), entrante:armarTurno(ar.fk,0)}; // 5:45-7:15
+  if(m>=825 && m<915)  return {saliente:armarTurno(ar.fk,0), entrante:armarTurno(ar.fk,1)};          // 13:45-15:15
+  if(m>=1305 && m<1395) return {saliente:armarTurno(ar.fk,1), entrante:armarTurno(ar.fk,2)};         // 21:45-23:15
+  return null;
 }
 function pStr(n){return n?'#'+String(n).padStart(5,'0'):'—';}
 function fkDisplay(fk){const[y,m,d]=fk.split('-');return`${parseInt(d)}/${parseInt(m)}/${y}`;}
@@ -369,7 +385,7 @@ function fechaAFk(fechaStr){
 }
 function tiFromNombre(nombre){ return nombre==='mañana'?0:nombre==='tarde'?1:2; }
 
-const T = turnoActual(); // calculado una vez al cargar
+let T = turnoActual(); // se recalcula en cada login; en ventana de cambio, el empleado elige
 
 // ═══════════════════════════════════════════════════
 // ESTADO / SESIÓN
@@ -398,6 +414,37 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 // ═══════════════════════════════════════════════════
 // LOGIN
 // ═══════════════════════════════════════════════════
+// Selector de turno durante la ventana de cambio (5:45-7:15 / 13:45-15:15 / 21:45-23:15)
+function mostrarSelectorTurno(v){
+  showScreen('operador');
+  document.getElementById('modal').innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal" style="max-width:460px">
+        <h2><i class="ti ti-clock"></i> Cambio de turno</h2>
+        <p style="margin-bottom:1rem">Estás en el horario de relevo. ¿Qué planilla querés abrir?</p>
+        <button class="btn" style="width:100%;margin-bottom:10px;padding:14px;text-align:left;border:2px solid #E9C46A;background:#FFF7E6" onclick="seleccionarTurno('${v.saliente.fk}',${v.saliente.ti})">
+          <div style="font-weight:800;font-size:15px"><span class="badge badge-${v.saliente.nombre}">${v.saliente.nombre}</span> ${pStr(v.saliente.num)} · ${v.saliente.fecha}</div>
+          <div style="font-size:12.5px;color:#92400E;margin-top:4px">Turno SALIENTE — todavía sin cerrar. Elegí esta opción para terminar de cargarlo y cerrarlo.</div>
+        </button>
+        <button class="btn" style="width:100%;padding:14px;text-align:left;border:2px solid #3B6D11;background:#EAF3DE" onclick="seleccionarTurno('${v.entrante.fk}',${v.entrante.ti})">
+          <div style="font-weight:800;font-size:15px"><span class="badge badge-${v.entrante.nombre}">${v.entrante.nombre}</span> ${pStr(v.entrante.num)} · ${v.entrante.fecha}</div>
+          <div style="font-size:12.5px;color:#27500A;margin-top:4px">Turno ENTRANTE — el que arranca ahora. Elegí esta opción si venís a iniciar tu turno.</div>
+        </button>
+      </div>
+    </div>`;
+}
+async function seleccionarTurno(fk, ti){
+  T = armarTurno(fk, ti);
+  document.getElementById('modal').innerHTML='';
+  await cargarEstadoTurno();
+  showScreen('operador');
+  renderOperador();
+}
+function reabrirSelector(){
+  const v = ventanaCambio();
+  if(v) mostrarSelectorTurno(v);
+}
+
 async function doLogin(){
   const uid=document.getElementById('sel-user').value;
   const pass=document.getElementById('inp-pass').value;
@@ -419,13 +466,25 @@ async function doLogin(){
   document.getElementById('inp-pass').value='';
   document.getElementById('login-msg').innerHTML='';
 
-  await cargarEstadoTurno();
-
   if(user.role==='admin'){
+    T = turnoActual();
+    await cargarEstadoTurno();
     document.getElementById('adm-user-badge').textContent=user.name+' · Admin';
     showScreen('admin'); showAdm('resumen', document.querySelector('.tab'));
   } else {
     document.getElementById('op-user-badge').textContent=user.name+' · '+user.cargo;
+    const v = ventanaCambio();
+    if(v){
+      const cerradosHoy = await fbLoad('turnosCerrados') || {};
+      if(!cerradosHoy[`T${v.saliente.num}`]){
+        mostrarSelectorTurno(v); // conviven dos planillas: el empleado elige
+        return;
+      }
+      T = v.entrante; // el saliente ya está cerrado: directo al turno que arranca
+    } else {
+      T = turnoActual();
+    }
+    await cargarEstadoTurno();
     showScreen('operador');
     renderOperador();
   }
@@ -637,7 +696,8 @@ function renderOperador(){
   const cerrado = !!turnosCerrados[`T${T.num}`];
   document.getElementById('op-planilla-info').innerHTML =
     `Planilla <strong>${pStr(T.num)}</strong> · Turno <strong>${T.nombre}</strong> · ${T.fecha}` +
-    (cerrado ? ` <span class="badge badge-out" style="margin-left:8px"><i class="ti ti-lock"></i> Cerrada</span> <button class="btn btn-sm" style="margin-left:8px" onclick="imprimirTurno(${T.num})"><i class="ti ti-file-download"></i> Exportar PDF</button>` : ` <span class="badge badge-ok" style="margin-left:8px">Abierta</span>`);
+    (cerrado ? ` <span class="badge badge-out" style="margin-left:8px"><i class="ti ti-lock"></i> Cerrada</span> <button class="btn btn-sm" style="margin-left:8px" onclick="imprimirTurno(${T.num})"><i class="ti ti-file-download"></i> Exportar PDF</button>` : ` <span class="badge badge-ok" style="margin-left:8px">Abierta</span>`) +
+    (ventanaCambio() ? ` <button class="btn btn-sm" style="margin-left:8px;color:#185FA5;border-color:#185FA5" onclick="reabrirSelector()"><i class="ti ti-arrows-exchange"></i> Cambiar turno</button>` : '');
 
   // Precios — formateados con $ y separador de miles, color por producto, Kerosene bloqueado
   document.getElementById('precios-wrap').innerHTML = PRODUCTOS.map(p=>{
@@ -1368,11 +1428,19 @@ function reabrirTurno(k, num){
 }
 async function confirmarReabrir(k){
   const cerrados = await fbLoad('turnosCerrados') || {};
+  const datos = cerrados[k];
+  if(datos){
+    // Restaurar los datos del turno al borrador ANTES de sacarlo de cerrados,
+    // para que al reabrirlo aparezca todo cargado y editable (no vacío).
+    const draft = await fbLoad('draftActual') || {};
+    draft[k] = {mediciones:datos.mediciones||[], pagos:datos.pagos||{}, precios:datos.precios||{}, cuentaCorriente:datos.cuentaCorriente||[], user:datos.cerradoPor, fecha:datos.fecha, turno:datos.turno};
+    await fbSave('draftActual', draft);
+  }
   delete cerrados[k];
   await fbSave('turnosCerrados', cerrados);
   turnosCerrados = cerrados;
   document.getElementById('modal').innerHTML='';
-  toast('✓ Turno reabierto','success');
+  toast('✓ Turno reabierto — sus datos siguen cargados','success');
   renderAdmContent();
 }
 function borrarTurno(k, num){
@@ -1392,6 +1460,9 @@ async function confirmarBorrar(k){
   const cerrados = await fbLoad('turnosCerrados') || {};
   delete cerrados[k];
   await fbSave('turnosCerrados', cerrados);
+  const draftLimpio = await fbLoad('draftActual') || {};
+  delete draftLimpio[k]; // borrar el turno borra también su borrador
+  await fbSave('draftActual', draftLimpio);
   turnosCerrados = cerrados;
   document.getElementById('modal').innerHTML='';
   toast('Turno eliminado','error');
