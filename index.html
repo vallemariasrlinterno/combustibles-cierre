@@ -615,12 +615,12 @@ function renderCuentaCorriente(cerrado){
   </tr>`).join('');
   const total = sumCuentaCorriente();
   document.getElementById('cc-wrap').innerHTML = `
-    ${cerrado?'':`<p style="font-size:12px;color:#6b7280;margin-bottom:.5rem"><i class="ti ti-info-circle"></i> Cargá <strong>litros</strong> o <strong>importe</strong> — el que falte se calcula solo según el precio del combustible. El producto es obligatorio.</p>
+    ${cerrado?'':`<p style="font-size:12px;color:#6b7280;margin-bottom:.5rem"><i class="ti ti-info-circle"></i> Cargá <strong>litros</strong> o <strong>importe</strong> — el que falte se calcula solo según el precio del combustible. <strong>El cliente es obligatorio.</strong></p>
     <div class="cc-form">
       <div><label>Fecha</label><input type="date" id="cc-fecha" value="${T.fk}"></div>
-      <div><label>Producto</label><select id="cc-producto">${PRODUCTOS.filter(p=>p!=='Kerosene').map(p=>`<option value="${p}">${p}</option>`).join('')}</select></div>
-      <div><label>Cliente</label><input type="text" id="cc-cliente" placeholder="NOMBRE" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
       <div><label>Litros</label><input type="text" inputmode="decimal" id="cc-litros" placeholder="Ej: 21,82" oninput="onLitrosInput(this)" onblur="formatearLitrosBlur(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></div>
+      <div><label>Cliente <span style="color:#A32D2D">*</span></label><input type="text" id="cc-cliente" placeholder="NOMBRE (obligatorio)" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
+      <div><label>Producto</label><select id="cc-producto">${PRODUCTOS.filter(p=>p!=='Kerosene').map(p=>`<option value="${p}">${p}</option>`).join('')}</select></div>
       <div><label>Importe ($)</label><input type="text" inputmode="numeric" id="cc-importe" placeholder="Ej: 89.000" oninput="onMilesInput(this)" onblur="if(this.value)this.value=formatMiles(parseInt(this.value,10))" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></div>
       <div><button class="btn btn-primary btn-block" onclick="agregarCuentaCorriente()"><i class="ti ti-plus"></i> Agregar</button></div>
     </div>`}
