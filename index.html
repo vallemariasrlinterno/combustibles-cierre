@@ -896,6 +896,10 @@ function actualizarSobre(idx, el){
   const n = raw==='' ? null : parseInt(raw,10);
   if(!pagos.sobres) pagos.sobres = [null,null,null,null,null,null,null,null];
   pagos.sobres[idx] = n;
+  // Correlatividad: si este sobre queda en 0 o vacio, los siguientes se limpian (no pueden existir huecos)
+  if(n==null || n<=0){
+    for(let j=idx+1;j<8;j++) pagos.sobres[j]=null;
+  }
   pagos.efectivo = sumSobres();
   guardarDraft();
   renderTotales();
@@ -984,15 +988,16 @@ function renderTotales(){
     <div class="efectivo-box">
       <div class="efectivo-box-label"><i class="ti ti-mail"></i> SOBRES DE EFECTIVO <span style="font-weight:400;text-transform:none">(Sobre 1 obligatorio, el resto según se usen)</span></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px">
-        ${(pagos.sobres||[null,null,null,null,null,null,null,null]).map((s,i)=>{
+        ${(pagos.sobres||[null,null,null,null,null,null,null,null]).map((s,i,arr)=>{
           const cargado = s!=null;
           const esObligatorio = i===0;
+          const habilitado = i===0 || (arr[i-1]!=null && arr[i-1]>0); // correlativo: se habilita si el anterior tiene > $0
           return `<div>
-            <label style="font-size:11px;font-weight:700;color:${cargado?'#27500A':(esObligatorio?'#A32D2D':'#6b7280')};display:block;margin-bottom:3px">Sobre ${i+1}${esObligatorio?' *':''}</label>
+            <label style="font-size:11px;font-weight:700;color:${cargado?'#27500A':(esObligatorio?'#A32D2D':(habilitado?'#6b7280':'#c3c9d1'))};display:block;margin-bottom:3px">Sobre ${i+1}${esObligatorio?' *':''}</label>
             <div class="precio-input-wrap"><span class="peso-sign">$</span>
             <input type="text" inputmode="numeric" class="${cargado?'campo-cargado':'campo-vacio'}" id="pago_sobre_${i+1}" placeholder="0"
-              style="text-align:right;${esObligatorio&&!cargado?'border-color:#A32D2D':''}"
-              value="${cargado?formatMiles(s):''}" ${cerrado?'disabled':''}
+              style="text-align:right;${esObligatorio&&!cargado?'border-color:#A32D2D':''}${!habilitado?'opacity:.45':''}"
+              value="${cargado?formatMiles(s):''}" ${(cerrado||!habilitado)?'disabled':''}
               oninput="onMilesInput(this)" onblur="actualizarSobre(${i},this)" onkeydown="if(event.key==='Enter'){event.preventDefault();const _id=this.id;this.blur();avanzarSiguientePago(_id);}"></div>
           </div>`;
         }).join('')}
@@ -1034,6 +1039,14 @@ function avanzarSiguientePago(idActual){
 function validarCierre(){
   const errores=[];
   if(!pagos.sobres || pagos.sobres[0]==null) errores.push(`Falta el <strong>Sobre 1</strong> de efectivo — es obligatorio (cargá 0 si no hubo efectivo)`);
+  if(pagos.sobres){
+    for(let i=1;i<8;i++){
+      if(pagos.sobres[i]!=null && pagos.sobres[i]>0 && !(pagos.sobres[i-1]>0)){
+        errores.push(`Los sobres deben cargarse en orden correlativo: el <strong>Sobre ${i+1}</strong> tiene valor pero el <strong>Sobre ${i}</strong> no`);
+        break;
+      }
+    }
+  }
   if(pagos.ventaNochero==null) errores.push(`Falta informar la <strong>VENTA NOCHERO</strong> — es obligatoria, cargá <strong>0</strong> si no hubo venta`);
   PRODUCTOS.forEach(p=>{
     if(p==='Kerosene' && !kerosenoActivo) return; // excepción: inactivo, no se comercializa
