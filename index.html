@@ -539,6 +539,12 @@ async function cargarEstadoTurno(){
     if(draft[key].precios) precios = draft[key].precios;
   } else {
     mediciones = mediicionesVacias();
+    // Heredar lecturas: el Inicial de cada pico arranca con el Final del último turno cerrado.
+    // Editable igual, por si el aforador real difiere (la advertencia de continuidad sigue vigilando).
+    mediciones.forEach(m=>{
+      const prev = buscarFinalTurnoAnterior(m.pico);
+      if(prev) m.inicial = prev.valor;
+    });
     cuentaCorriente = [];
   }
   syncCuentaCorriente();
