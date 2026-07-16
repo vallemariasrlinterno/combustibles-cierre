@@ -395,7 +395,7 @@ let T = turnoActual(); // se recalcula en cada login; en ventana de cambio, el e
 let currentUser=null;
 let precios={}; // {producto:number}
 let mediciones=mediicionesVacias();
-let pagos={efectivo:null,tarjetaPlaya:null,tarjetaSelect:null,pagosElectronicos:null,cheque:null,cuentaCorriente:0,ventaNochero:null};
+let pagos={efectivo:null,tarjetaPlaya:null,tarjetaSelect:null,pagosElectronicos:null,cheque:null,cuentaCorriente:0,ventaNochero:null,sobres:[null,null,null,null,null,null,null,null]};
 let cuentaCorriente=[]; // {id,fecha,litros,cliente,producto,importe}
 let kerosenoActivo=false; // interruptor único: precio + Surtidor 4 (Cara 7/8). Persistente entre turnos.
 let turnosCerrados={};
@@ -547,6 +547,7 @@ async function cargarEstadoTurno(){
     });
     cuentaCorriente = [];
   }
+  normalizarPagos(!!turnosCerrados[key]);
   syncCuentaCorriente();
 }
 
@@ -879,6 +880,27 @@ function actualizarMedicion(id, campo, el){
   // repintar toda la sección para reflejar el estado de error/cargado en la fila
   renderOperador();
 }
+// ═══ Sobres de efectivo: hasta 8 por turno, la suma ES el efectivo ═══
+function sumSobres(){ return (pagos.sobres||[]).reduce((s,v)=>s+(v||0),0); }
+function normalizarPagos(esCerrado){
+  if(!pagos.sobres || !Array.isArray(pagos.sobres)){
+    pagos.sobres = [null,null,null,null,null,null,null,null];
+    // Transición: si un turno abierto ya tenía efectivo cargado a mano (versión anterior),
+    // lo pasamos al Sobre 1 para no perderlo. Los turnos ya cerrados se muestran tal cual.
+    if(!esCerrado && pagos.efectivo>0) pagos.sobres[0] = pagos.efectivo;
+  }
+  if(!esCerrado) pagos.efectivo = sumSobres();
+}
+function actualizarSobre(idx, el){
+  const raw = el.value.replace(/[^0-9]/g,'');
+  const n = raw==='' ? null : parseInt(raw,10);
+  if(!pagos.sobres) pagos.sobres = [null,null,null,null,null,null,null,null];
+  pagos.sobres[idx] = n;
+  pagos.efectivo = sumSobres();
+  guardarDraft();
+  renderTotales();
+}
+
 function actualizarPago(id, el){
   if(id==='ventaNochero'){
     // Obligatorio informar: 0 explícito vale (queda 0), vacío = sin informar (null)
@@ -944,7 +966,6 @@ function renderTotales(){
   const efectivoIngresado = pagos.efectivo||0;
   const ventaNochero = pagos.ventaNochero||0;
   const diferencia = efectivoIngresado - ventaNochero - efectivoEsperado;
-  const filledEfectivo = pagos.efectivo && pagos.efectivo>0;
 
   let estado, signo;
   if(Math.abs(diferencia)<1){ estado='cero'; signo=''; }
@@ -961,13 +982,24 @@ function renderTotales(){
     </div>
 
     <div class="efectivo-box">
-      <div class="efectivo-box-label"><i class="ti ti-cash"></i> DINERO EN EFECTIVO</div>
-      <div class="precio-input-wrap" style="max-width:220px;margin:0 auto">
-        <span class="peso-sign" style="font-size:16px">$</span>
-        <input type="text" inputmode="numeric" class="${filledEfectivo?'campo-cargado':'campo-vacio'}" id="pago_efectivo" placeholder="0"
-          style="font-size:18px;font-weight:800;text-align:center;padding-left:30px"
-          value="${filledEfectivo?formatMiles(pagos.efectivo):''}" ${cerrado?'disabled':''}
-          oninput="onMilesInput(this)" onblur="actualizarPago('efectivo',this)" onkeydown="if(event.key==='Enter'){event.preventDefault();const _id=this.id;this.blur();avanzarSiguientePago(_id);}">
+      <div class="efectivo-box-label"><i class="ti ti-mail"></i> SOBRES DE EFECTIVO <span style="font-weight:400;text-transform:none">(Sobre 1 obligatorio, el resto según se usen)</span></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px">
+        ${(pagos.sobres||[null,null,null,null,null,null,null,null]).map((s,i)=>{
+          const cargado = s!=null;
+          const esObligatorio = i===0;
+          return `<div>
+            <label style="font-size:11px;font-weight:700;color:${cargado?'#27500A':(esObligatorio?'#A32D2D':'#6b7280')};display:block;margin-bottom:3px">Sobre ${i+1}${esObligatorio?' *':''}</label>
+            <div class="precio-input-wrap"><span class="peso-sign">$</span>
+            <input type="text" inputmode="numeric" class="${cargado?'campo-cargado':'campo-vacio'}" id="pago_sobre_${i+1}" placeholder="0"
+              style="text-align:right;${esObligatorio&&!cargado?'border-color:#A32D2D':''}"
+              value="${cargado?formatMiles(s):''}" ${cerrado?'disabled':''}
+              oninput="onMilesInput(this)" onblur="actualizarSobre(${i},this)" onkeydown="if(event.key==='Enter'){event.preventDefault();const _id=this.id;this.blur();avanzarSiguientePago(_id);}"></div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="text-align:center;padding:10px;border-radius:10px;background:#fff;border:1px solid #b6cfe6">
+        <div class="efectivo-box-label" style="margin-bottom:2px"><i class="ti ti-cash"></i> DINERO EN EFECTIVO <span style="font-weight:400;text-transform:none">(suma de sobres)</span></div>
+        <div style="font-size:26px;font-weight:800;color:#0C447C">$${efectivoIngresado.toLocaleString('es-AR',{maximumFractionDigits:0})}</div>
       </div>
       <div style="margin-top:12px;padding:12px;border-radius:10px;border:2px solid ${pagos.ventaNochero!=null?'#3B6D11':'#A32D2D'};background:${pagos.ventaNochero!=null?'#EAF3DE':'#FCEBEB'}">
         <div style="font-size:12px;font-weight:800;margin-bottom:6px;color:${pagos.ventaNochero!=null?'#27500A':'#A32D2D'}"><span class="cascada-signo">−</span>VENTA NOCHERO ${pagos.ventaNochero!=null?'✓ informada':'⚠ SIN INFORMAR — obligatoria (cargá 0 si no hubo)'}</div>
@@ -990,7 +1022,7 @@ function renderTotales(){
 
 // Enter en el cierre de caja: avanza en orden Pagos Electrónicos → Posnet Playa → Select → Cheque → Efectivo
 function avanzarSiguientePago(idActual){
-  const orden = ['pago_pagosElectronicos','pago_tarjetaPlaya','pago_tarjetaSelect','pago_cheque','pago_efectivo','pago_ventaNochero'];
+  const orden = ['pago_pagosElectronicos','pago_tarjetaPlaya','pago_tarjetaSelect','pago_cheque','pago_sobre_1','pago_sobre_2','pago_sobre_3','pago_sobre_4','pago_sobre_5','pago_sobre_6','pago_sobre_7','pago_sobre_8','pago_ventaNochero'];
   const idx = orden.indexOf(idActual);
   if(idx===-1) return;
   for(let i=idx+1;i<orden.length;i++){
@@ -1001,6 +1033,7 @@ function avanzarSiguientePago(idActual){
 
 function validarCierre(){
   const errores=[];
+  if(!pagos.sobres || pagos.sobres[0]==null) errores.push(`Falta el <strong>Sobre 1</strong> de efectivo — es obligatorio (cargá 0 si no hubo efectivo)`);
   if(pagos.ventaNochero==null) errores.push(`Falta informar la <strong>VENTA NOCHERO</strong> — es obligatoria, cargá <strong>0</strong> si no hubo venta`);
   PRODUCTOS.forEach(p=>{
     if(p==='Kerosene' && !kerosenoActivo) return; // excepción: inactivo, no se comercializa
@@ -1311,7 +1344,8 @@ function imprimirTurno(numPlanilla){
     <tr class="tot"><td>Total Combustibles (Ventas)</td><td style="text-align:right">$${c.totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
     ${filasResta}
     <tr class="tot" style="background:#f3f4f6"><td>TOTAL</td><td style="text-align:right">$${totalNoEfectivoPdf.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
-    <tr><td>Efectivo (contado a mano)</td><td style="text-align:right">$${(c.pagos.efectivo||0).toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
+    ${(c.pagos.sobres||[]).map((s,i)=> s!=null ? `<tr><td style="padding-left:18px;color:#555">Sobre ${i+1}</td><td style="text-align:right">$${s.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>` : '').join('')}
+    <tr><td>Efectivo (suma de sobres)</td><td style="text-align:right">$${(c.pagos.efectivo||0).toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
     <tr><td>− Venta Nochero (minimercado)</td><td style="text-align:right">$${(c.pagos.ventaNochero||0).toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>
     <tr class="tot"><td>DIFERENCIA DE CAJA</td><td style="text-align:right">$${c.diferencia.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr></tbody></table>
     ${cc.length ? `<h2>Cuenta corriente — venta a clientes</h2>
