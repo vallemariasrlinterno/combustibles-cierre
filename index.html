@@ -240,6 +240,8 @@ async function fbLoad(docName, base){
       <button class="tab active" onclick="showAdm('resumen',this)"><i class="ti ti-chart-bar"></i> Resumen</button>
       <button class="tab" onclick="showAdm('turnos',this)"><i class="ti ti-history"></i> Turnos cerrados</button>
       <button class="tab" onclick="showAdm('cargar',this)"><i class="ti ti-pencil-plus"></i> Cargar turno</button>
+      <button class="tab" onclick="showAdm('ctacte',this)"><i class="ti ti-wallet"></i> Cta. Corriente</button>
+      <button class="tab" onclick="showAdm('litros',this)"><i class="ti ti-droplet"></i> Litros</button>
       <button class="tab" onclick="showAdm('usuarios',this)"><i class="ti ti-users"></i> Usuarios</button>
     </div>
     <div id="adm-content"></div>
@@ -1133,6 +1135,8 @@ let admSection='resumen';
 let admFk=null; // fecha que se está mirando en Resumen (null = hoy)
 let rptDesde=null, rptHasta=null, rptTurnoDesde=0, rptTurnoHasta=2, rptMostrar=false;
 let rptMetrica='pesos', rptProducto='Todos';
+let ccDesde=null, ccHasta=null, ccClienteF='Todos', ccProductoF='Todos', ccOrden='fecha';
+let ltDesde=null, ltHasta=null, ltProductoF='Todos';
 function showAdm(sec, el){
   admSection=sec;
   document.querySelectorAll('#screen-admin .tab').forEach(t=>t.classList.remove('active'));
@@ -1260,6 +1264,94 @@ async function renderAdmContent(){
         ${!esHoy?`<button class="btn btn-sm btn-primary" onclick="window._cargarFk=null;renderAdmContent()"><i class="ti ti-calendar"></i> Hoy</button>`:'<span style="font-size:12px;color:#27500A;font-weight:500">● Hoy</span>'}
       </div>
       <div class="table-wrap"><table><thead><tr><th>Planilla</th><th>Turno</th><th>Estado</th><th></th></tr></thead><tbody>${filas}</tbody></table></div>
+    </div>`;
+  } else if(admSection==='ctacte'){
+    const cerrados = await fbLoad('turnosCerrados') || {};
+    turnosCerrados = cerrados;
+    const MIN='2026-07-10';
+    if(!ccDesde) ccDesde=MIN;
+    if(!ccHasta) ccHasta=T.fk;
+    let todas=[];
+    Object.values(cerrados).forEach(c=>{
+      (c.cuentaCorriente||[]).forEach(r=>{
+        const ffk = (r.fecha && /^\d{4}-\d{2}-\d{2}$/.test(r.fecha)) ? r.fecha : (c.fk || fechaAFk(c.fecha));
+        todas.push({fk:ffk, cliente:r.cliente, producto:r.producto, litros:r.litros||0, importe:r.importe||0, planilla:c.planilla});
+      });
+    });
+    const clientesTodos = [...new Set(todas.map(f=>f.cliente))].sort();
+    let filas = todas.filter(f=> f.fk && diffDiasFk(ccDesde,f.fk)>=0 && diffDiasFk(f.fk,ccHasta)>=0 );
+    if(ccClienteF!=='Todos') filas=filas.filter(f=>f.cliente===ccClienteF);
+    if(ccProductoF!=='Todos') filas=filas.filter(f=>f.producto===ccProductoF);
+    if(ccOrden==='litros') filas.sort((a,b)=>b.litros-a.litros);
+    else if(ccOrden==='importe') filas.sort((a,b)=>b.importe-a.importe);
+    else filas.sort((a,b)=> a.fk<b.fk?1:a.fk>b.fk?-1:0);
+    const totLit=filas.reduce((s,f)=>s+f.litros,0), totImp=filas.reduce((s,f)=>s+f.importe,0);
+    const porCliente={};
+    filas.forEach(f=>{ if(!porCliente[f.cliente]) porCliente[f.cliente]={ops:0,litros:0,importe:0}; porCliente[f.cliente].ops++; porCliente[f.cliente].litros+=f.litros; porCliente[f.cliente].importe+=f.importe; });
+    const clientesOrden = Object.entries(porCliente).sort((a,b)=>b[1].importe-a[1].importe);
+    el.innerHTML = `<div class="card" style="margin-bottom:1rem">
+      <div class="section-title"><i class="ti ti-wallet"></i> Cuenta Corriente — deudas a cobrar</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:4px">
+        <div><label style="font-size:11px;color:#6b7280;display:block">Desde</label><input type="date" value="${ccDesde}" min="${MIN}" max="${T.fk}" onchange="ccDesde=this.value;renderAdmContent()" style="width:auto;margin:0;padding:6px 8px;font-size:13px"></div>
+        <div><label style="font-size:11px;color:#6b7280;display:block">Hasta</label><input type="date" value="${ccHasta}" min="${MIN}" max="${T.fk}" onchange="ccHasta=this.value;renderAdmContent()" style="width:auto;margin:0;padding:6px 8px;font-size:13px"></div>
+        <div><label style="font-size:11px;color:#6b7280;display:block">Cliente</label><select onchange="ccClienteF=this.value;renderAdmContent()" style="width:auto;margin:0;padding:6px 8px;font-size:13px"><option value="Todos">Todos</option>${clientesTodos.map(c=>`<option ${ccClienteF===c?'selected':''}>${c}</option>`).join('')}</select></div>
+        <div><label style="font-size:11px;color:#6b7280;display:block">Combustible</label><select onchange="ccProductoF=this.value;renderAdmContent()" style="width:auto;margin:0;padding:6px 8px;font-size:13px"><option value="Todos">Todos</option>${PRODUCTOS.map(p=>`<option ${ccProductoF===p?'selected':''}>${p}</option>`).join('')}</select></div>
+        <div><label style="font-size:11px;color:#6b7280;display:block">Ordenar por</label><select onchange="ccOrden=this.value;renderAdmContent()" style="width:auto;margin:0;padding:6px 8px;font-size:13px"><option value="fecha" ${ccOrden==='fecha'?'selected':''}>Fecha (recientes)</option><option value="litros" ${ccOrden==='litros'?'selected':''}>Litros (mayor)</option><option value="importe" ${ccOrden==='importe'?'selected':''}>Importe (mayor)</option></select></div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:1rem;border:2px solid #185FA5">
+      <div class="section-title" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px"><span><i class="ti ti-users"></i> Deuda por cliente</span><span style="font-size:13px;color:#6b7280">${filas.length} operaci${filas.length===1?'ón':'ones'} · <strong>${totLit.toLocaleString('es-AR',{maximumFractionDigits:1})} L</strong> · <strong style="color:#A32D2D">$${totImp.toLocaleString('es-AR',{maximumFractionDigits:0})}</strong></span></div>
+      <div class="table-wrap"><table><thead><tr><th>Cliente</th><th style="text-align:right">Operaciones</th><th style="text-align:right">Litros</th><th style="text-align:right">Total adeudado</th></tr></thead><tbody>
+      ${clientesOrden.map(([cli,v])=>`<tr><td><strong>${cli}</strong></td><td style="text-align:right">${v.ops}</td><td style="text-align:right">${v.litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td><td style="text-align:right;font-weight:700;color:#A32D2D">$${v.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#9ca3af">Sin operaciones en el rango con esos filtros</td></tr>'}
+      </tbody></table></div>
+    </div>
+    <div class="card">
+      <div class="section-title"><i class="ti ti-list-details"></i> Detalle de operaciones</div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Planilla</th><th>Cliente</th><th>Combustible</th><th style="text-align:right">Litros</th><th style="text-align:right">Importe</th></tr></thead><tbody>
+      ${filas.map(f=>`<tr><td>${fkDisplay(f.fk)}</td><td>${pStr(f.planilla)}</td><td>${f.cliente}</td><td><span class="producto-dot" style="background:${PRODUCT_COLORS[f.producto]||'#6b7280'}"></span>${f.producto}</td><td style="text-align:right">${f.litros.toLocaleString('es-AR',{maximumFractionDigits:2})}</td><td style="text-align:right;font-weight:600">$${f.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#9ca3af">Sin operaciones</td></tr>'}
+      </tbody></table></div>
+    </div>`;
+  } else if(admSection==='litros'){
+    const cerrados = await fbLoad('turnosCerrados') || {};
+    turnosCerrados = cerrados;
+    const MIN='2026-07-10';
+    if(!ltDesde) ltDesde=MIN;
+    if(!ltHasta) ltHasta=T.fk;
+    const porDia={}, porProd={};
+    Object.values(cerrados).forEach(c=>{
+      const fk=c.fk||fechaAFk(c.fecha);
+      if(!fk || diffDiasFk(ltDesde,fk)<0 || diffDiasFk(fk,ltHasta)<0) return;
+      (c.porProducto||[]).forEach(p=>{
+        if(ltProductoF!=='Todos' && p.producto!==ltProductoF) return;
+        if(!(p.litros>0)) return;
+        if(!porDia[fk]) porDia[fk]={litros:0,importe:0};
+        porDia[fk].litros+=p.litros; porDia[fk].importe+=p.importe;
+        if(!porProd[p.producto]) porProd[p.producto]={litros:0,importe:0};
+        porProd[p.producto].litros+=p.litros; porProd[p.producto].importe+=p.importe;
+      });
+    });
+    const dias = Object.keys(porDia).sort().reverse();
+    const totL = dias.reduce((s,d)=>s+porDia[d].litros,0), totI = dias.reduce((s,d)=>s+porDia[d].importe,0);
+    el.innerHTML = `<div class="card" style="margin-bottom:1rem">
+      <div class="section-title"><i class="ti ti-droplet"></i> Litros vendidos</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div><label style="font-size:11px;color:#6b7280;display:block">Desde</label><input type="date" value="${ltDesde}" min="${MIN}" max="${T.fk}" onchange="ltDesde=this.value;renderAdmContent()" style="width:auto;margin:0;padding:6px 8px;font-size:13px"></div>
+        <div><label style="font-size:11px;color:#6b7280;display:block">Hasta</label><input type="date" value="${ltHasta}" min="${MIN}" max="${T.fk}" onchange="ltHasta=this.value;renderAdmContent()" style="width:auto;margin:0;padding:6px 8px;font-size:13px"></div>
+        <div><label style="font-size:11px;color:#6b7280;display:block">Combustible</label><select onchange="ltProductoF=this.value;renderAdmContent()" style="width:auto;margin:0;padding:6px 8px;font-size:13px"><option value="Todos">Todos</option>${PRODUCTOS.map(p=>`<option ${ltProductoF===p?'selected':''}>${p}</option>`).join('')}</select></div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:1rem;border:2px solid #185FA5">
+      <div class="section-title" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px"><span><i class="ti ti-sum"></i> Total del rango</span><span style="font-size:14px"><strong>${totL.toLocaleString('es-AR',{maximumFractionDigits:1})} L</strong> · <strong>$${totI.toLocaleString('es-AR',{maximumFractionDigits:0})}</strong></span></div>
+      <div class="table-wrap"><table><thead><tr><th>Combustible</th><th style="text-align:right">Litros</th><th style="text-align:right">Importe</th></tr></thead><tbody>
+      ${Object.entries(porProd).sort((a,b)=>b[1].litros-a[1].litros).map(([pr,v])=>`<tr><td><span class="producto-dot" style="background:${PRODUCT_COLORS[pr]||'#6b7280'}"></span><span style="font-weight:700;color:${PRODUCT_COLORS[pr]||'#374151'}">${pr}</span></td><td style="text-align:right">${v.litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td><td style="text-align:right;font-weight:600">$${v.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>`).join('') || '<tr><td colspan="3" style="text-align:center;color:#9ca3af">Sin ventas en el rango</td></tr>'}
+      </tbody></table></div>
+    </div>
+    <div class="card">
+      <div class="section-title"><i class="ti ti-calendar"></i> Día por día</div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th style="text-align:right">Litros</th><th style="text-align:right">Importe</th></tr></thead><tbody>
+      ${dias.map(d=>`<tr><td>${fkDisplay(d)}</td><td style="text-align:right">${porDia[d].litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td><td style="text-align:right;font-weight:600">$${porDia[d].importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>`).join('') || '<tr><td colspan="3" style="text-align:center;color:#9ca3af">Sin días con cierres en el rango</td></tr>'}
+      </tbody></table></div>
+      <p style="font-size:12px;color:#9ca3af;margin-top:8px">Solo se computan turnos cerrados. Los días sin ningún cierre no aparecen.</p>
     </div>`;
   } else if(admSection==='usuarios'){
     const [b, passesData] = await Promise.all([ fbLoad('bloqueados'), fbLoad('passes', FB_BASE_NOCHERO) ]);
