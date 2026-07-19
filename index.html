@@ -271,10 +271,10 @@ const USERS=[
 
 // Estructura fija de surtidores / caras / picos — un producto por pico
 const PICOS = [
-  {pico:1,  surtidor:1, cara:1, producto:'Nafta Super C'},
+  {pico:1,  surtidor:1, cara:1, producto:'Nafta Super'},
   {pico:2,  surtidor:1, cara:1, producto:'Nafta Super'},
   {pico:3,  surtidor:1, cara:1, producto:'V-Power Nafta'},
-  {pico:4,  surtidor:1, cara:2, producto:'Nafta Super C'},
+  {pico:4,  surtidor:1, cara:2, producto:'Nafta Super'},
   {pico:5,  surtidor:1, cara:2, producto:'Nafta Super'},
   {pico:6,  surtidor:1, cara:2, producto:'V-Power Nafta'},
   {pico:7,  surtidor:2, cara:3, producto:'V-Power Diesel'},
@@ -288,7 +288,7 @@ const PICOS = [
   {pico:15, surtidor:4, cara:7, producto:'Kerosene'},
   {pico:16, surtidor:4, cara:8, producto:'Kerosene'},
 ];
-const PRODUCTOS = ['Nafta Super','V-Power Nafta','Nafta Super C','V-Power Diesel','Evolux','Kerosene'];
+const PRODUCTOS = ['Nafta Super','V-Power Nafta','V-Power Diesel','Evolux','Kerosene'];
 const PRODUCT_COLORS = {
   'Nafta Super': '#DC2626',
   'V-Power Nafta': '#16A34A',
@@ -671,9 +671,18 @@ function agregarCuentaCorriente(){
   if((litros==null||isNaN(litros)) && (importe==null||isNaN(importe))){
     toast('Cargá los litros o el importe en pesos','error'); return;
   }
-  const precio = precios[producto]||0;
-  if(precio<=0){
-    toast(`${producto} todavía no tiene precio cargado — cargalo arriba primero`,'error'); return;
+  let producto2 = producto, precio;
+  if(producto==='__manual__'){
+    producto2 = (document.getElementById('cc-producto-manual')?.value||'').trim().toUpperCase();
+    const rawPm = (document.getElementById('cc-precio-manual')?.value||'').replace(/[^0-9]/g,'');
+    precio = rawPm===''?0:parseInt(rawPm,10);
+    if(!producto2){ toast('Escribí el nombre del producto manual','error'); return; }
+    if(precio<=0){ toast('Cargá el precio del producto manual','error'); return; }
+  } else {
+    precio = precios[producto]||0;
+    if(precio<=0){
+      toast(`${producto} todavía no tiene precio cargado — cargalo arriba primero`,'error'); return;
+    }
   }
   // Obligación: el combustible. El otro valor (litros o importe) se calcula automático.
   if(litros!=null && !isNaN(litros) && (importe==null||isNaN(importe))){
@@ -684,7 +693,7 @@ function agregarCuentaCorriente(){
   if(litros==null||importe==null||isNaN(litros)||isNaN(importe)||litros<=0||importe<=0){
     toast('Revisá los valores cargados','error'); return;
   }
-  cuentaCorriente.push({id:'cc'+Date.now(), fecha, litros, cliente, producto, importe});
+  cuentaCorriente.push({id:'cc'+Date.now(), fecha, litros, cliente, producto: producto2, importe});
   syncCuentaCorriente();
   guardarDraft();
   renderOperador();
@@ -711,7 +720,11 @@ function renderCuentaCorriente(cerrado){
       <div><label>Fecha</label><input type="date" id="cc-fecha" value="${T.fk}"></div>
       <div><label>Litros</label><input type="text" inputmode="decimal" id="cc-litros" placeholder="Ej: 21,82" oninput="onLitrosInput(this)" onblur="formatearLitrosBlur(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></div>
       <div><label>Cliente <span style="color:#A32D2D">*</span></label><input type="text" id="cc-cliente" placeholder="NOMBRE (obligatorio)" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
-      <div><label>Producto</label><select id="cc-producto">${PRODUCTOS.filter(p=>p!=='Kerosene').map(p=>`<option value="${p}">${p}</option>`).join('')}</select></div>
+      <div><label>Producto</label><select id="cc-producto" onchange="document.getElementById('cc-manual-wrap').style.display=this.value==='__manual__'?'flex':'none'">${PRODUCTOS.filter(p=>p!=='Kerosene').map(p=>`<option value="${p}">${p}</option>`).join('')}<option value="__manual__">Otro (manual)</option></select></div>
+      <div id="cc-manual-wrap" style="display:none;gap:10px;flex-wrap:wrap">
+        <div><label>Producto manual</label><input type="text" id="cc-producto-manual" placeholder="Ej: LUBRICANTE HX7" oninput="this.value=this.value.toUpperCase()"></div>
+        <div><label>Precio manual ($)</label><div class="precio-input-wrap"><span class="peso-sign">$</span><input type="text" inputmode="numeric" id="cc-precio-manual" placeholder="0" style="text-align:right" oninput="onMilesInput(this)"></div></div>
+      </div>
       <div><label>Importe ($)</label><input type="text" inputmode="numeric" id="cc-importe" placeholder="Ej: 89.000" oninput="onMilesInput(this)" onblur="if(this.value)this.value=formatMiles(parseInt(this.value,10))" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></div>
       <div><button class="btn btn-primary btn-block" onclick="agregarCuentaCorriente()"><i class="ti ti-plus"></i> Agregar</button></div>
     </div>`}
@@ -1612,7 +1625,7 @@ function renderReporteRango(cerrados){
       let totalCombustibles=0;
       turnosRango.forEach(c=>{
         totalCombustibles += c.totalCombustibles||0;
-        (c.porProducto||[]).forEach(p=>{ resumen[p.producto].litros+=p.litros; resumen[p.producto].importe+=p.importe; });
+        (c.porProducto||[]).forEach(p=>{ if(!resumen[p.producto]) resumen[p.producto]={litros:0,importe:0}; resumen[p.producto].litros+=p.litros; resumen[p.producto].importe+=p.importe; });
       });
       const totalLitros = Object.values(resumen).reduce((s,p)=>s+p.litros,0);
       resultHtml = `<div class="card" style="border:2px solid #185FA5">
