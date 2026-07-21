@@ -363,6 +363,7 @@ function ventanaCambio(){
   return null;
 }
 function pStr(n){return n?'#'+String(n).padStart(5,'0'):'—';}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function fkDisplay(fk){const[y,m,d]=fk.split('-');return`${parseInt(d)}/${parseInt(m)}/${y}`;}
 function planillasDia(fk){
   const diff=diffDiasFk(FK_INICIO,fk);
@@ -710,7 +711,7 @@ async function cargarCatalogoNochero(){
     catalogoNocheroCargado = true;
     // Si el datalist ya está en pantalla, poblarlo
     const dl = document.getElementById('cc-nochero-list');
-    if(dl) dl.innerHTML = catalogoNochero.map(p=>`<option value="${p.nombre}">$${p.precio.toLocaleString('es-AR')} · ${p.categoria}</option>`).join('');
+    if(dl) dl.innerHTML = catalogoNochero.map(p=>`<option value="${esc(p.nombre)}">$${p.precio.toLocaleString('es-AR')} · ${esc(p.categoria)}</option>`).join('');
   }catch(e){ /* silencioso: si falla, el empleado usa "Otro (manual)" */ }
   catalogoNocheroCargando = false;
 }
@@ -784,8 +785,8 @@ function renderCuentaCorriente(cerrado){
   const filas = cuentaCorriente.map(r=>`<tr>
     <td>${r.fecha}</td>
     <td style="text-align:right">${r.litros.toLocaleString('es-AR',{maximumFractionDigits:2})}</td>
-    <td>${r.cliente}</td>
-    <td><span class="producto-dot" style="background:${PRODUCT_COLORS[r.producto]||'#6b7280'}"></span>${r.producto}</td>
+    <td>${esc(r.cliente)}</td>
+    <td><span class="producto-dot" style="background:${PRODUCT_COLORS[r.producto]||'#6b7280'}"></span>${esc(r.producto)}</td>
     <td style="text-align:right">$${r.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</td>
     <td>${cerrado?'':`<button class="btn btn-sm btn-danger" onclick="eliminarCuentaCorriente('${r.id}')"><i class="ti ti-trash"></i></button>`}</td>
   </tr>`).join('');
@@ -1396,7 +1397,7 @@ async function renderAdmContent(){
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:4px">
         <div><label style="font-size:11px;color:#6b7280;display:block">Desde</label><input type="date" value="${ccDesde}" min="${MIN}" max="${T.fk}" onchange="ccDesde=this.value;renderAdmContent()" style="width:auto;margin:0;padding:6px 8px;font-size:13px"></div>
         <div><label style="font-size:11px;color:#6b7280;display:block">Hasta</label><input type="date" value="${ccHasta}" min="${MIN}" max="${T.fk}" onchange="ccHasta=this.value;renderAdmContent()" style="width:auto;margin:0;padding:6px 8px;font-size:13px"></div>
-        <div><label style="font-size:11px;color:#6b7280;display:block">Cliente</label><select onchange="ccClienteF=this.value;renderAdmContent()" style="width:auto;margin:0;padding:6px 8px;font-size:13px"><option value="Todos">Todos</option>${clientesTodos.map(c=>`<option ${ccClienteF===c?'selected':''}>${c}</option>`).join('')}</select></div>
+        <div><label style="font-size:11px;color:#6b7280;display:block">Cliente</label><select onchange="ccClienteF=this.value;renderAdmContent()" style="width:auto;margin:0;padding:6px 8px;font-size:13px"><option value="Todos">Todos</option>${clientesTodos.map(c=>`<option ${ccClienteF===c?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
         <div><label style="font-size:11px;color:#6b7280;display:block">Combustible</label><select onchange="ccProductoF=this.value;renderAdmContent()" style="width:auto;margin:0;padding:6px 8px;font-size:13px"><option value="Todos">Todos</option>${PRODUCTOS.map(p=>`<option ${ccProductoF===p?'selected':''}>${p}</option>`).join('')}</select></div>
         <div><label style="font-size:11px;color:#6b7280;display:block">Ordenar por</label><select onchange="ccOrden=this.value;renderAdmContent()" style="width:auto;margin:0;padding:6px 8px;font-size:13px"><option value="fecha" ${ccOrden==='fecha'?'selected':''}>Fecha (recientes)</option><option value="litros" ${ccOrden==='litros'?'selected':''}>Litros (mayor)</option><option value="importe" ${ccOrden==='importe'?'selected':''}>Importe (mayor)</option></select></div>
       </div>
@@ -1409,7 +1410,7 @@ async function renderAdmContent(){
         const saldoHtml = saldo>0 ? `<span style="color:#A32D2D;font-weight:800">$${saldo.toLocaleString('es-AR',{maximumFractionDigits:0})}</span>`
           : saldo<0 ? `<span style="color:#185FA5;font-weight:700">a favor $${Math.abs(saldo).toLocaleString('es-AR',{maximumFractionDigits:0})}</span>`
           : `<span style="color:#27500A;font-weight:700">✓ al día</span>`;
-        return `<tr><td><strong>${cli}</strong></td><td style="text-align:right">${v.ops}</td><td style="text-align:right">${v.litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td><td style="text-align:right">$${v.fiado.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td style="text-align:right;color:#27500A">$${v.cobrado.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td style="text-align:right">${saldoHtml}</td></tr>`;
+        return `<tr><td><strong>${esc(cli)}</strong></td><td style="text-align:right">${v.ops}</td><td style="text-align:right">${v.litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td><td style="text-align:right">$${v.fiado.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td style="text-align:right;color:#27500A">$${v.cobrado.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td style="text-align:right">${saldoHtml}</td></tr>`;
       }).join('') || '<tr><td colspan="6" style="text-align:center;color:#9ca3af">Sin movimientos</td></tr>'}
       </tbody></table></div>
       <p style="font-size:11.5px;color:#9ca3af;margin-top:6px">El saldo es acumulado desde el inicio (no depende del filtro de fechas). El resumen del rango de arriba a la derecha sí respeta los filtros.</p>
@@ -1418,7 +1419,7 @@ async function renderAdmContent(){
       <div class="section-title"><i class="ti ti-cash-banknote"></i> Registrar pago de cliente</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
         <div><label style="font-size:11px;color:#6b7280;display:block">Fecha</label><input type="date" id="cb-fecha" value="${T.fk}" min="2026-07-10" max="${T.fk}" style="width:auto;margin:0;padding:6px 8px;font-size:13px"></div>
-        <div><label style="font-size:11px;color:#6b7280;display:block">Cliente</label><select id="cb-cliente" style="width:auto;margin:0;padding:6px 8px;font-size:13px">${clientesTodos.map(c=>`<option>${c}</option>`).join('')}</select></div>
+        <div><label style="font-size:11px;color:#6b7280;display:block">Cliente</label><select id="cb-cliente" style="width:auto;margin:0;padding:6px 8px;font-size:13px">${clientesTodos.map(c=>`<option>${esc(c)}</option>`).join('')}</select></div>
         <div><label style="font-size:11px;color:#6b7280;display:block">Importe ($)</label><div class="precio-input-wrap" style="max-width:150px"><span class="peso-sign">$</span><input type="text" inputmode="numeric" id="cb-importe" placeholder="0" style="text-align:right" oninput="onMilesInput(this)" onblur="if(this.value)this.value=formatMiles(parseInt(this.value.replace(/[^0-9]/g,''),10))" onkeydown="if(event.key==='Enter'){event.preventDefault();registrarCobranza();}"></div></div>
         <div style="flex:1;min-width:140px"><label style="font-size:11px;color:#6b7280;display:block">Nota (opcional)</label><input type="text" id="cb-nota" placeholder="ej. transferencia, recibo N°..." style="margin:0;padding:6px 8px;font-size:13px"></div>
         <button class="btn btn-green" onclick="registrarCobranza()"><i class="ti ti-check"></i> Registrar</button>
@@ -1427,13 +1428,13 @@ async function renderAdmContent(){
     <div class="card" style="margin-bottom:1rem">
       <div class="section-title"><i class="ti ti-receipt"></i> Pagos registrados <span style="font-weight:400;color:#6b7280;font-size:12px">(en el rango filtrado)</span></div>
       <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Cliente</th><th style="text-align:right">Importe</th><th>Nota</th><th>Registró</th><th></th></tr></thead><tbody>
-      ${pagosFiltrados.map(p=>`<tr><td>${fkDisplay(p.fk)}</td><td><strong>${p.cliente}</strong></td><td style="text-align:right;color:#27500A;font-weight:700">$${(p.importe||0).toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td style="color:#6b7280;font-size:12px">${p.nota||'—'}</td><td style="font-size:12px">${p.por||'—'}</td><td style="text-align:right"><button class="btn btn-sm" style="color:#A32D2D;border-color:#A32D2D" onclick="borrarCobranza('${p.id}')"><i class="ti ti-trash"></i></button></td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#9ca3af">Sin pagos registrados en el rango</td></tr>'}
+      ${pagosFiltrados.map(p=>`<tr><td>${fkDisplay(p.fk)}</td><td><strong>${esc(p.cliente)}</strong></td><td style="text-align:right;color:#27500A;font-weight:700">$${(p.importe||0).toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td style="color:#6b7280;font-size:12px">${esc(p.nota)||'—'}</td><td style="font-size:12px">${esc(p.por)||'—'}</td><td style="text-align:right"><button class="btn btn-sm" style="color:#A32D2D;border-color:#A32D2D" onclick="borrarCobranza('${p.id}')"><i class="ti ti-trash"></i></button></td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#9ca3af">Sin pagos registrados en el rango</td></tr>'}
       </tbody></table></div>
     </div>
     <div class="card">
       <div class="section-title"><i class="ti ti-list-details"></i> Detalle de operaciones</div>
       <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Planilla</th><th>Cliente</th><th>Combustible</th><th style="text-align:right">Litros</th><th style="text-align:right">Importe</th></tr></thead><tbody>
-      ${filas.map(f=>`<tr><td>${fkDisplay(f.fk)}</td><td>${pStr(f.planilla)}</td><td>${f.cliente}</td><td><span class="producto-dot" style="background:${PRODUCT_COLORS[f.producto]||'#6b7280'}"></span>${f.producto}</td><td style="text-align:right">${f.litros.toLocaleString('es-AR',{maximumFractionDigits:2})}</td><td style="text-align:right;font-weight:600">$${f.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#9ca3af">Sin operaciones</td></tr>'}
+      ${filas.map(f=>`<tr><td>${fkDisplay(f.fk)}</td><td>${pStr(f.planilla)}</td><td>${esc(f.cliente)}</td><td><span class="producto-dot" style="background:${PRODUCT_COLORS[f.producto]||'#6b7280'}"></span>${esc(f.producto)}</td><td style="text-align:right">${f.litros.toLocaleString('es-AR',{maximumFractionDigits:2})}</td><td style="text-align:right;font-weight:600">$${f.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#9ca3af">Sin operaciones</td></tr>'}
       </tbody></table></div>
     </div>`;
   } else if(admSection==='litros'){
@@ -1547,7 +1548,7 @@ function imprimirTurno(numPlanilla){
   const totalNoEfectivoPdf = noEfectivoPdf.reduce((s,m)=>s+(c.pagos[m.id]||0),0);
   const efectivoEsperadoPdf = c.totalCombustibles - totalNoEfectivoPdf;
   const cc = c.cuentaCorriente || [];
-  const filasCC = cc.map(r=>`<tr><td>${r.fecha}</td><td style="text-align:right">${r.litros.toLocaleString('es-AR',{maximumFractionDigits:2})}</td><td>${r.cliente}</td><td>${r.producto}</td><td style="text-align:right">$${r.importe.toLocaleString('es-AR')}</td></tr>`).join('');
+  const filasCC = cc.map(r=>`<tr><td>${r.fecha}</td><td style="text-align:right">${r.litros.toLocaleString('es-AR',{maximumFractionDigits:2})}</td><td>${esc(r.cliente)}</td><td>${esc(r.producto)}</td><td style="text-align:right">$${r.importe.toLocaleString('es-AR')}</td></tr>`).join('');
   const totalCC = cc.reduce((s,r)=>s+(r.importe||0),0);
   const win = window.open('','_blank');
   win.document.write(`
