@@ -363,6 +363,22 @@ function ventanaCambio(){
   return null;
 }
 function pStr(n){return n?'#'+String(n).padStart(5,'0'):'—';}
+// Devuelve solo los turnos válidos de un objeto turnosCerrados, con campos numéricos saneados.
+// Blinda todo el admin ante datos corruptos en Firebase (null, campos faltantes, escrituras a medias).
+function turnosValidos(cerrados){
+  return Object.values(cerrados||{})
+    .filter(c => c && typeof c==='object' && (typeof c.planilla==='number'))
+    .map(c => ({
+      ...c,
+      fecha: c.fecha||'—', turno: c.turno||'—', cerradoPor: c.cerradoPor||'—', hora: c.hora||'',
+      totalCombustibles: Number(c.totalCombustibles)||0,
+      totalPagos: Number(c.totalPagos)||0,
+      diferencia: Number(c.diferencia)||0,
+      porProducto: Array.isArray(c.porProducto)?c.porProducto.filter(p=>p&&p.producto):[],
+      cuentaCorriente: Array.isArray(c.cuentaCorriente)?c.cuentaCorriente.filter(r=>r):[],
+      pagos: (c.pagos&&typeof c.pagos==='object')?c.pagos:{},
+    }));
+}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function fkDisplay(fk){const[y,m,d]=fk.split('-');return`${parseInt(d)}/${parseInt(m)}/${y}`;}
 function planillasDia(fk){
@@ -532,9 +548,10 @@ async function cargarEstadoTurno(){
   const key=`T${T.num}`;
   if(turnosCerrados[key]){
     // el turno ya fue cerrado por otro usuario
-    mediciones = turnosCerrados[key].mediciones;
-    pagos = turnosCerrados[key].pagos;
-    cuentaCorriente = turnosCerrados[key].cuentaCorriente || [];
+    const tc = turnosCerrados[key] || {};
+    mediciones = Array.isArray(tc.mediciones) ? tc.mediciones : mediicionesVacias();
+    pagos = (tc.pagos && typeof tc.pagos==='object') ? tc.pagos : pagos;
+    cuentaCorriente = Array.isArray(tc.cuentaCorriente) ? tc.cuentaCorriente : [];
   } else if(draft && draft[key]){
     mediciones = draft[key].mediciones || mediicionesVacias();
     pagos = draft[key].pagos || pagos;
@@ -1262,7 +1279,7 @@ async function renderAdmContent(){
     let turnosCerradosDia=0, totalVendidoDia=0, litrosVendidosDia=0;
     const turnoCards = planes.map(p=>{
       if(p.num===null) return `<div class="turno-card" style="opacity:.35"><span class="badge badge-${p.nombre}">${p.nombre}</span><div style="font-size:12px;color:#9ca3af;margin-top:6px">no aplica</div></div>`;
-      const c = cerrados[p.k] || null;
+      const c = (cerrados[p.k] && typeof cerrados[p.k]==='object') ? cerrados[p.k] : null;
       const cerrado = !!c;
       const esPasado = p.num < planillaActualReal;
       const esActual = p.num === planillaActualReal;
@@ -1313,7 +1330,7 @@ async function renderAdmContent(){
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${turnoCards}</div>`;
   } else if(admSection==='turnos'){
     const cerrados = await fbLoad('turnosCerrados') || {};
-    const lista = Object.values(cerrados).sort((a,b)=>b.planilla-a.planilla);
+    const lista = turnosValidos(cerrados).sort((a,b)=>b.planilla-a.planilla);
     el.innerHTML = renderReporteRango(cerrados) +
       `<div class="card"><div class="section-title"><i class="ti ti-clock"></i> Turnos cerrados</div><div class="table-wrap"><table><thead><tr><th>Planilla</th><th>Fecha</th><th>Turno</th><th>Cerró</th><th>Hora</th><th>Combustibles</th><th>Pagos</th><th>Diferencia</th><th></th></tr></thead><tbody>
       ${lista.map(c=>`<tr><td>${pStr(c.planilla)}</td><td>${c.fecha}</td><td><span class="badge badge-${c.turno}">${c.turno}</span></td><td>${c.cerradoPor}</td><td>${c.hora}</td><td>$${c.totalCombustibles.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td>$${c.totalPagos.toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td class="${c.diferencia<0?'diff-bad':'diff-ok'}">${c.diferencia<0?'-':c.diferencia>0?'+':''}$${Math.abs(c.diferencia).toLocaleString('es-AR',{maximumFractionDigits:0})}</td><td><button class="btn btn-sm" onclick="imprimirTurno(${c.planilla})"><i class="ti ti-file-download"></i> PDF</button></td></tr>`).join('') || '<tr><td colspan="9" style="text-align:center;color:#9ca3af">Sin turnos cerrados todavía</td></tr>'}
@@ -1372,7 +1389,7 @@ async function renderAdmContent(){
     if(!ccDesde) ccDesde=MIN;
     if(!ccHasta) ccHasta=T.fk;
     let todas=[];
-    Object.values(cerrados).forEach(c=>{
+    turnosValidos(cerrados).forEach(c=>{
       (c.cuentaCorriente||[]).forEach(r=>{
         const ffk = (r.fecha && /^\d{4}-\d{2}-\d{2}$/.test(r.fecha)) ? r.fecha : (c.fk || fechaAFk(c.fecha));
         todas.push({fk:ffk, cliente:r.cliente, producto:r.producto, litros:r.litros||0, importe:r.importe||0, planilla:c.planilla});
@@ -1444,7 +1461,7 @@ async function renderAdmContent(){
     if(!ltDesde) ltDesde=MIN;
     if(!ltHasta) ltHasta=T.fk;
     const porDia={}, porProd={};
-    Object.values(cerrados).forEach(c=>{
+    turnosValidos(cerrados).forEach(c=>{
       const fk=c.fk||fechaAFk(c.fecha);
       if(!fk || diffDiasFk(ltDesde,fk)<0 || diffDiasFk(fk,ltHasta)<0) return;
       (c.porProducto||[]).forEach(p=>{
@@ -1535,14 +1552,17 @@ async function guardarPass(uid){
 // EXPORTAR PDF (vía impresión del navegador)
 // ═══════════════════════════════════════════════════
 function imprimirTurno(numPlanilla){
-  const c = turnosCerrados[`T${numPlanilla}`];
-  if(!c){toast('Turno no encontrado','error');return;}
+  let c = turnosCerrados[`T${numPlanilla}`];
+  if(!c || typeof c!=='object'){toast('Turno no encontrado','error');return;}
+  // Saneo defensivo por si el documento en Firebase quedó incompleto
+  c = {...c, pagos:(c.pagos&&typeof c.pagos==='object')?c.pagos:{}, cuentaCorriente:Array.isArray(c.cuentaCorriente)?c.cuentaCorriente:[], porProducto:Array.isArray(c.porProducto)?c.porProducto:[], mediciones:Array.isArray(c.mediciones)?c.mediciones:[], totalCombustibles:Number(c.totalCombustibles)||0, diferencia:Number(c.diferencia)||0};
   const filasMediciones = PICOS.map(p=>{
-    const m = c.mediciones.find(x=>x.pico===p.pico);
+    const m = c.mediciones.find(x=>x && x.pico===p.pico) || {inicial:null, final:null};
     const litros = (m.final!=null && m.inicial!=null) ? Math.max(0,(m.final-m.inicial)) : 0;
     return `<tr><td>${p.surtidor}</td><td>${p.cara}</td><td>Pico ${p.pico}</td><td>${p.producto}</td><td style="text-align:right">${m.inicial!=null?String(m.inicial).padStart(6,'0'):'—'}</td><td style="text-align:right">${m.final!=null?String(m.final).padStart(6,'0'):'—'}</td><td style="text-align:right">${litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td></tr>`;
   }).join('');
-  const filasProductos = c.porProducto.map(p=>`<tr><td>${p.producto}</td><td style="text-align:right">$${(c.precios[p.producto]||0).toLocaleString('es-AR')}</td><td style="text-align:right">${p.litros.toLocaleString('es-AR',{maximumFractionDigits:1})}</td><td style="text-align:right">$${p.importe.toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>`).join('');
+  const preciosPdf = (c.precios && typeof c.precios==='object') ? c.precios : {};
+  const filasProductos = c.porProducto.map(p=>`<tr><td>${p.producto}</td><td style="text-align:right">$${(preciosPdf[p.producto]||0).toLocaleString('es-AR')}</td><td style="text-align:right">${(p.litros||0).toLocaleString('es-AR',{maximumFractionDigits:1})}</td><td style="text-align:right">$${(p.importe||0).toLocaleString('es-AR',{maximumFractionDigits:0})}</td></tr>`).join('');
   const noEfectivoPdf = MEDIOS_PAGO.filter(m=>m.id!=='efectivo');
   const filasResta = noEfectivoPdf.map(m=>`<tr><td>− ${m.label}</td><td style="text-align:right">$${(c.pagos[m.id]||0).toLocaleString('es-AR')}</td></tr>`).join('');
   const totalNoEfectivoPdf = noEfectivoPdf.reduce((s,m)=>s+(c.pagos[m.id]||0),0);
@@ -1689,7 +1709,7 @@ function buildGraficoSemanal(turnosRango){
 }
 
 function renderReporteRango(cerrados){
-  const items = Object.values(cerrados);
+  const items = turnosValidos(cerrados);
   let resultHtml = '';
   if(rptMostrar && rptDesde && rptHasta){
     const turnosRango = items.filter(c=>{
