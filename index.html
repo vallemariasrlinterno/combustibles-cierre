@@ -656,6 +656,69 @@ function renderAvisosPrecios(){
 function sumCuentaCorriente(){ return cuentaCorriente.reduce((s,r)=>s+(r.importe||0),0); }
 function syncCuentaCorriente(){ pagos.cuentaCorriente = sumCuentaCorriente(); }
 
+// Mostrar/ocultar los sub-campos según el tipo de producto elegido en CC
+function onCambioProductoCC(v){
+  document.getElementById('cc-manual-wrap').style.display = v==='__manual__'?'flex':'none';
+  document.getElementById('cc-nochero-wrap').style.display = v==='__nochero__'?'flex':'none';
+  // Con producto del nochero, litros/importe los maneja cantidad×precio: los limpio y deshabilito
+  const cl=document.getElementById('cc-litros'), ci=document.getElementById('cc-importe');
+  const esNochero = v==='__nochero__';
+  if(cl){ cl.disabled=esNochero; if(esNochero) cl.value=''; }
+  if(ci){ ci.disabled=esNochero; if(esNochero) ci.value=''; }
+  if(esNochero && !catalogoNocheroCargado) cargarCatalogoNochero();
+}
+function onNocheroSel(nombre){
+  const pr = precioNochero(nombre);
+  const v = document.getElementById('cc-precio-nochero-view');
+  if(v) v.value = pr>0 ? '$'+pr.toLocaleString('es-AR') : '(no encontrado)';
+}
+
+// ═══ Catálogo del Nochero (leído de la MISMA planilla Google Sheets que Stock Nochero) ═══
+const SHEET_ID_NOCHERO = '1kRZBJo5l51FuVvEsLR8Z_hJV-X2AKHMsW-L-N0NzNBc';
+const HOJAS_NOCHERO = ['Minimercado','Lubricantes','Gas + Hielo'];
+let catalogoNochero = [];        // [{nombre, precio, categoria}]
+let catalogoNocheroCargado = false;
+let catalogoNocheroCargando = false;
+
+async function cargarHojaNochero(name){
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID_NOCHERO}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}`;
+  const text = await (await fetch(url)).text();
+  const rows = text.trim().split('\n').map(l=>{
+    const r=[], re=/("(?:[^"]|"")*"|[^,]*),?/g; let m;
+    while((m=re.exec(l))!==null){ if(m[0]==='')break; r.push(m[1].replace(/^"|"$/g,'').replace(/""/g,'"').trim()); }
+    return r;
+  });
+  const prods=[]; let hf=false;
+  for(const row of rows){
+    const f=(row[0]||'').toUpperCase();
+    const rowStr=row.join(',').toUpperCase();
+    if(f.includes('PRODUCTO')||(!hf&&rowStr.includes('PRECIO')&&rowStr.includes('STOCK'))){ hf=true; continue; }
+    if(!hf) continue;
+    const nombre=(row[0]||'').trim();
+    if(!nombre||f.includes('TOTAL')||nombre===',') continue;
+    const precio=parseInt((row[1]||'').replace(/[$.\s]/g,'').replace(',',''))||0;
+    prods.push({nombre, precio, categoria:name});
+  }
+  return prods;
+}
+async function cargarCatalogoNochero(){
+  if(catalogoNocheroCargado || catalogoNocheroCargando) return;
+  catalogoNocheroCargando = true;
+  try{
+    const partes = await Promise.all(HOJAS_NOCHERO.map(h=>cargarHojaNochero(h).catch(()=>[])));
+    catalogoNochero = partes.flat().filter(p=>p.nombre && p.precio>0);
+    catalogoNocheroCargado = true;
+    // Si el datalist ya está en pantalla, poblarlo
+    const dl = document.getElementById('cc-nochero-list');
+    if(dl) dl.innerHTML = catalogoNochero.map(p=>`<option value="${p.nombre}">$${p.precio.toLocaleString('es-AR')} · ${p.categoria}</option>`).join('');
+  }catch(e){ /* silencioso: si falla, el empleado usa "Otro (manual)" */ }
+  catalogoNocheroCargando = false;
+}
+function precioNochero(nombre){
+  const p = catalogoNochero.find(x=>x.nombre.toLowerCase()===(nombre||'').trim().toLowerCase());
+  return p ? p.precio : 0;
+}
+
 function agregarCuentaCorriente(){
   const fecha = document.getElementById('cc-fecha').value || T.fk;
   const cliente = document.getElementById('cc-cliente').value.trim().toUpperCase();
@@ -668,11 +731,24 @@ function agregarCuentaCorriente(){
   if(!fecha || !cliente || !producto){
     toast('Completá fecha, cliente y producto','error'); return;
   }
-  if((litros==null||isNaN(litros)) && (importe==null||isNaN(importe))){
+  // Los productos del nochero calculan litros e importe desde cantidad×precio (más abajo),
+  // así que la exigencia de "litros o importe" solo aplica al resto.
+  if(producto!=='__nochero__' && (litros==null||isNaN(litros)) && (importe==null||isNaN(importe))){
     toast('Cargá los litros o el importe en pesos','error'); return;
   }
   let producto2 = producto, precio;
-  if(producto==='__manual__'){
+  if(producto==='__nochero__'){
+    producto2 = (document.getElementById('cc-producto-nochero')?.value||'').trim();
+    if(!producto2){ toast('Elegí un producto del nochero','error'); return; }
+    precio = precioNochero(producto2);
+    if(precio<=0){ toast('Ese producto no está en la lista del nochero (o no tiene precio). Usá "Otro (manual)" si hace falta.','error'); return; }
+    const cantDig = (document.getElementById('cc-cant-nochero')?.value||'').replace(/[^0-9]/g,'');
+    const cant = cantDig===''?0:parseInt(cantDig,10);
+    if(cant<=0){ toast('Cargá la cantidad','error'); return; }
+    // Para productos del nochero, "litros" guarda la cantidad de unidades
+    litros = cant;
+    importe = cant*precio;
+  } else if(producto==='__manual__'){
     producto2 = (document.getElementById('cc-producto-manual')?.value||'').trim().toUpperCase();
     const rawPm = (document.getElementById('cc-precio-manual')?.value||'').replace(/[^0-9]/g,'');
     precio = rawPm===''?0:parseInt(rawPm,10);
@@ -720,7 +796,15 @@ function renderCuentaCorriente(cerrado){
       <div><label>Fecha</label><input type="date" id="cc-fecha" value="${T.fk}"></div>
       <div><label>Litros</label><input type="text" inputmode="decimal" id="cc-litros" placeholder="Ej: 21,82" oninput="onLitrosInput(this)" onblur="formatearLitrosBlur(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></div>
       <div><label>Cliente <span style="color:#A32D2D">*</span></label><input type="text" id="cc-cliente" placeholder="NOMBRE (obligatorio)" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
-      <div><label>Producto</label><select id="cc-producto" onchange="document.getElementById('cc-manual-wrap').style.display=this.value==='__manual__'?'flex':'none'">${PRODUCTOS.filter(p=>p!=='Kerosene').map(p=>`<option value="${p}">${p}</option>`).join('')}<option value="__manual__">Otro (manual)</option></select></div>
+      <div><label>Producto</label><select id="cc-producto" onchange="onCambioProductoCC(this.value)">${PRODUCTOS.filter(p=>p!=='Kerosene').map(p=>`<option value="${p}">${p}</option>`).join('')}<option value="__nochero__">🛒 Producto del nochero</option><option value="__manual__">Otro (manual)</option></select></div>
+      <div id="cc-nochero-wrap" style="display:none;gap:10px;flex-wrap:wrap">
+        <div><label>Producto nochero</label>
+          <input type="text" id="cc-producto-nochero" list="cc-nochero-list" placeholder="Escribí para buscar..." autocomplete="off" oninput="onNocheroSel(this.value)">
+          <datalist id="cc-nochero-list"></datalist>
+        </div>
+        <div><label>Cantidad</label><input type="text" inputmode="numeric" id="cc-cant-nochero" placeholder="Ej: 2" oninput="this.value=this.value.replace(/[^0-9]/g,'')" onkeydown="if(event.key==='Enter'){event.preventDefault();agregarCuentaCorriente();}"></div>
+        <div><label>Precio unitario</label><input type="text" id="cc-precio-nochero-view" disabled placeholder="—" style="background:#f3f4f6;text-align:right"></div>
+      </div>
       <div id="cc-manual-wrap" style="display:none;gap:10px;flex-wrap:wrap">
         <div><label>Producto manual</label><input type="text" id="cc-producto-manual" placeholder="Ej: LUBRICANTE HX7" oninput="this.value=this.value.toUpperCase()"></div>
         <div><label>Precio manual ($)</label><div class="precio-input-wrap"><span class="peso-sign">$</span><input type="text" inputmode="numeric" id="cc-precio-manual" placeholder="0" style="text-align:right" oninput="onMilesInput(this)"></div></div>
@@ -738,6 +822,7 @@ function renderCuentaCorriente(cerrado){
 // RENDER — OPERADOR
 // ═══════════════════════════════════════════════════
 function renderOperador(){
+  if(!catalogoNocheroCargado && !catalogoNocheroCargando) cargarCatalogoNochero();
   const cerrado = !!turnosCerrados[`T${T.num}`];
   const esAdmin = currentUser?.role==='admin';
   document.getElementById('adm-mode-banner').innerHTML = esAdmin ? `
