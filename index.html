@@ -311,6 +311,20 @@ function slug(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f
 function mediicionesVacias(){
   return PICOS.map(p=>({id:`p${p.pico}`, pico:p.pico, surtidor:p.surtidor, cara:p.cara, producto:p.producto, inicial:null, final:null}));
 }
+// Garantiza que el array tenga SIEMPRE los 16 picos, conservando los valores ya cargados.
+// Sin esto, un turno guardado con mediciones incompletas (dato viejo, borrador parcial o
+// escritura corrupta) rompe la pantalla del operador al buscar un pico inexistente.
+function normalizarMediciones(arr){
+  const previos = Array.isArray(arr) ? arr : [];
+  return PICOS.map(p=>{
+    const m = previos.find(x=>x && x.pico===p.pico) || {};
+    return {
+      id:`p${p.pico}`, pico:p.pico, surtidor:p.surtidor, cara:p.cara, producto:p.producto,
+      inicial: (typeof m.inicial==='number' && !isNaN(m.inicial)) ? m.inicial : null,
+      final:   (typeof m.final==='number'   && !isNaN(m.final))   ? m.final   : null,
+    };
+  });
+}
 
 // ═══════════════════════════════════════════════════
 // FECHA / TURNO (idéntico algoritmo a Stock Nochero)
@@ -549,11 +563,11 @@ async function cargarEstadoTurno(){
   if(turnosCerrados[key]){
     // el turno ya fue cerrado por otro usuario
     const tc = turnosCerrados[key] || {};
-    mediciones = Array.isArray(tc.mediciones) ? tc.mediciones : mediicionesVacias();
+    mediciones = normalizarMediciones(tc.mediciones);
     pagos = (tc.pagos && typeof tc.pagos==='object') ? tc.pagos : pagos;
     cuentaCorriente = Array.isArray(tc.cuentaCorriente) ? tc.cuentaCorriente : [];
   } else if(draft && draft[key]){
-    mediciones = draft[key].mediciones || mediicionesVacias();
+    mediciones = normalizarMediciones(draft[key].mediciones);
     pagos = draft[key].pagos || pagos;
     cuentaCorriente = draft[key].cuentaCorriente || [];
     if(draft[key].precios) precios = draft[key].precios;
@@ -893,7 +907,7 @@ function renderOperador(){
       caraActual=p.cara;
       html+=`<tr class="cara-header-row"><td colspan="5"><i class="ti ti-corner-down-right"></i> Cara ${p.cara}</td></tr>`;
     }
-    const m = mediciones.find(x=>x.pico===p.pico);
+    const m = mediciones.find(x=>x && x.pico===p.pico) || {inicial:null, final:null, id:`p${p.pico}`};
     const esKerosenePico = p.producto==='Kerosene';
     const inactivo = esKerosenePico && !kerosenoActivo;
     const litros = (!inactivo && m.final!=null && m.inicial!=null) ? Math.max(0,(m.final-m.inicial)) : 0;
@@ -944,7 +958,7 @@ function detectarAdvertenciasMediciones(){
   const avisos=[];
   PICOS.forEach(p=>{
     if(p.producto==='Kerosene' && !kerosenoActivo) return; // inactivo, no genera avisos
-    const m = mediciones.find(x=>x.pico===p.pico);
+    const m = mediciones.find(x=>x && x.pico===p.pico) || {inicial:null, final:null};
     if(m.inicial!=null && m.final!=null){
       if(m.final < m.inicial){
         avisos.push({tipo:'error', texto:`<strong>Pico ${p.pico}</strong> (${p.producto}, Surtidor ${p.surtidor}): el Final (${m.final.toLocaleString('es-AR')}) es menor al Inicial (${m.inicial.toLocaleString('es-AR')}). El final nunca puede ser menor al inicial — a lo sumo igual, si no se vendió nada.`});
@@ -991,7 +1005,8 @@ function actualizarMedicion(id, campo, el){
   const raw = el.value.replace(/[^0-9]/g,'');
   const n = raw!=='' ? parseInt(raw,10) : null;
   if(n!=null) el.value = String(n).padStart(6,'0');
-  const m = mediciones.find(x=>x.id===id);
+  const m = mediciones.find(x=>x && x.id===id);
+  if(!m) return; // el pico no existe en el array (dato inconsistente): no hacer nada
   m[campo] = n;
   guardarDraft();
   renderTotales();
@@ -1172,7 +1187,7 @@ function validarCierre(){
   });
   PICOS.forEach(p=>{
     if(p.producto==='Kerosene' && !kerosenoActivo) return; // excepción: inactivo
-    const m = mediciones.find(x=>x.pico===p.pico);
+    const m = mediciones.find(x=>x && x.pico===p.pico) || {inicial:null, final:null};
     if(m.inicial==null || m.final==null) errores.push(`Falta cargar el Pico ${p.pico} — ${p.producto} (Surtidor ${p.surtidor}, Cara ${p.cara})`);
     else if(m.final < m.inicial) errores.push(`Pico ${p.pico} — ${p.producto}: el Final no puede ser menor al Inicial`);
   });
