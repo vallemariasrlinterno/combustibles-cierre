@@ -308,6 +308,14 @@ const MEDIOS_PAGO = [
 
 function slug(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_');}
 
+// Estado de pagos completamente en blanco. Los medios de pago (sobres, cheque, tarjetas,
+// venta nochero, cuenta corriente) NUNCA se heredan entre turnos: son propios de cada turno.
+// La única herencia entre turnos es la de los aforadores (Final de uno = Inicial del siguiente).
+function pagosVacios(){
+  return {efectivo:null, tarjetaPlaya:null, tarjetaSelect:null, pagosElectronicos:null,
+          cheque:null, cuentaCorriente:0, ventaNochero:null,
+          sobres:[null,null,null,null,null,null,null,null]};
+}
 function mediicionesVacias(){
   return PICOS.map(p=>({id:`p${p.pico}`, pico:p.pico, surtidor:p.surtidor, cara:p.cara, producto:p.producto, inicial:null, final:null}));
 }
@@ -564,11 +572,11 @@ async function cargarEstadoTurno(){
     // el turno ya fue cerrado por otro usuario
     const tc = turnosCerrados[key] || {};
     mediciones = normalizarMediciones(tc.mediciones);
-    pagos = (tc.pagos && typeof tc.pagos==='object') ? tc.pagos : pagos;
+    pagos = (tc.pagos && typeof tc.pagos==='object') ? tc.pagos : pagosVacios();
     cuentaCorriente = Array.isArray(tc.cuentaCorriente) ? tc.cuentaCorriente : [];
   } else if(draft && draft[key]){
     mediciones = normalizarMediciones(draft[key].mediciones);
-    pagos = draft[key].pagos || pagos;
+    pagos = (draft[key].pagos && typeof draft[key].pagos==='object') ? draft[key].pagos : pagosVacios();
     cuentaCorriente = draft[key].cuentaCorriente || [];
     if(draft[key].precios) precios = draft[key].precios;
   } else {
@@ -579,6 +587,8 @@ async function cargarEstadoTurno(){
       const prev = buscarFinalTurnoAnterior(m.pico);
       if(prev) m.inicial = prev.valor;
     });
+    // Turno virgen: los medios de pago arrancan SIEMPRE en blanco (no se heredan del turno anterior)
+    pagos = pagosVacios();
     cuentaCorriente = [];
   }
   normalizarPagos(!!turnosCerrados[key]);
