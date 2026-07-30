@@ -264,9 +264,9 @@ const USERS=[
   {id:'elias',  name:'Elías',  role:'operador', cargo:'Jefe de Turno', pass:'elias123',  refuerzo:false},
   {id:'luciano',name:'Luciano',role:'operador', cargo:'Jefe de Turno', pass:'luciano123',refuerzo:false},
   {id:'gabi',   name:'Gabi',   role:'operador', cargo:'Jefe de Turno', pass:'gabi123',   refuerzo:false},
-  {id:'eitan',  name:'Eitan',  role:'operador', cargo:'Refuerzo',      pass:'eitan123',  refuerzo:true},
   {id:'anibal', name:'Aníbal', role:'operador', cargo:'Refuerzo',      pass:'anibal123', refuerzo:true},
   {id:'agus',   name:'Agus',   role:'operador', cargo:'Refuerzo',      pass:'agus123',   refuerzo:true},
+  {id:'bruno',  name:'Bruno',  role:'operador', cargo:'Refuerzo',      pass:'bruno123',  refuerzo:true},
 ];
 
 // Estructura fija de surtidores / caras / picos — un producto por pico
@@ -440,7 +440,7 @@ let pagos={efectivo:null,tarjetaPlaya:null,tarjetaSelect:null,pagosElectronicos:
 let cuentaCorriente=[]; // {id,fecha,litros,cliente,producto,importe}
 let kerosenoActivo=false; // interruptor único: precio + Surtidor 4 (Cara 7/8). Persistente entre turnos.
 let turnosCerrados={};
-let bloqueados={eitan:true}; // default: Eitan bloqueado en esta app
+let bloqueados={}; // se cargan desde Firebase; ningún usuario bloqueado por defecto
 
 function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById('screen-'+id).classList.add('active');}
 function toast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.className='show '+(type||'');setTimeout(()=>t.className='',2600);}
