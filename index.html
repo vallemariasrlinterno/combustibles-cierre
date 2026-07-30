@@ -258,7 +258,11 @@ const P0=19186;
 const FK_INICIO='2026-06-13';
 const TURNOS=['mañana','tarde','noche'];
 
-const USERS=[
+// Usuarios base: viven en el código y son el piso seguro del login.
+// Nunca se borran (si alguien deja de trabajar se BLOQUEA), así el acceso jamás
+// depende de que Firebase responda. Los usuarios agregados desde el panel se
+// guardan en Firebase y se suman a esta lista al iniciar.
+const USERS_BASE=[
   {id:'franco', name:'Franco', role:'admin',    cargo:'Administrador', pass:'franco123', refuerzo:false},
   {id:'sergio', name:'Sergio', role:'operador', cargo:'Jefe de Turno', pass:'sergio123', refuerzo:false},
   {id:'elias',  name:'Elías',  role:'operador', cargo:'Jefe de Turno', pass:'elias123',  refuerzo:false},
@@ -268,6 +272,28 @@ const USERS=[
   {id:'agus',   name:'Agus',   role:'operador', cargo:'Refuerzo',      pass:'agus123',   refuerzo:true},
   {id:'bruno',  name:'Bruno',  role:'operador', cargo:'Refuerzo',      pass:'bruno123',  refuerzo:true},
 ];
+let USERS = [...USERS_BASE];        // lista efectiva (base + agregados)
+let usuariosExtra = [];             // los agregados desde el panel de Franco
+
+// Reconstruye la lista efectiva y refresca el desplegable del login
+function aplicarUsuarios(extra){
+  usuariosExtra = Array.isArray(extra) ? extra.filter(u=>u && u.id && u.name) : [];
+  const idsBase = new Set(USERS_BASE.map(u=>u.id));
+  USERS = [...USERS_BASE, ...usuariosExtra.filter(u=>!idsBase.has(u.id))];
+  const sel = document.getElementById('sel-user');
+  if(sel){
+    const previo = sel.value;
+    sel.innerHTML='';
+    USERS.forEach(u=>{const o=document.createElement('option');o.value=u.id;o.textContent=u.name+(u.role==='admin'?' (Admin)':'');sel.appendChild(o);});
+    if(previo && USERS.some(u=>u.id===previo)) sel.value=previo;
+  }
+}
+async function cargarUsuariosExtra(){
+  try{
+    const extra = await fbLoad('usuariosExtra', FB_BASE_NOCHERO); // compartido con Stock Nochero
+    if(extra) aplicarUsuarios(extra);
+  }catch(e){ /* si falla, quedan los usuarios base: el login nunca se rompe */ }
+}
 
 // Estructura fija de surtidores / caras / picos — un producto por pico
 const PICOS = [
@@ -452,6 +478,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     `<strong style="font-size:15px;color:#1a1a1a">${T.hora} hs</strong><br>Turno <strong>${T.nombre}</strong> · ${T.fecha}<br>Planilla <strong>${pStr(T.num)}</strong>`;
   const b = await fbLoad('bloqueados');
   if(b) bloqueados = b;
+  await cargarUsuariosExtra();
 });
 
 // ═══════════════════════════════════════════════════
@@ -1526,24 +1553,103 @@ async function renderAdmContent(){
     bloqueados = b || bloqueados;
     const passesActuales = passesData || {};
     el.innerHTML = `<div class="card">
-      <p style="font-size:13px;color:#6b7280;margin-bottom:1rem"><i class="ti ti-info-circle"></i> El bloqueo es propio de esta app (no afecta Stock Nochero). La contraseña sí es compartida — cambiarla acá también la actualiza en Stock Nochero. Clic en 🔑 para cambiarla.</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:1rem">
+        <p style="font-size:13px;color:#6b7280;margin:0;flex:1;min-width:240px"><i class="ti ti-info-circle"></i> El bloqueo es propio de esta app (no afecta Stock Nochero). La contraseña y los usuarios agregados sí son compartidos con Stock Nochero. Clic en 🔑 para cambiar la contraseña.</p>
+        <button class="btn btn-primary" onclick="nuevoUsuarioModal()"><i class="ti ti-user-plus"></i> Agregar usuario</button>
+      </div>
       <div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Cargo</th><th>Usuario</th><th>Contraseña</th><th></th></tr></thead><tbody>
       ${USERS.map(u=>{
         const pass = passesActuales[u.id] || u.pass;
         const bloq = !!bloqueados[u.id];
         return `<tr>
-          <td><strong>${u.name}</strong>${bloq?' <span class="badge badge-out" style="margin-left:4px">bloqueado</span>':''}</td>
+          <td><strong>${u.name}</strong>${bloq?' <span class="badge badge-out" style="margin-left:4px">bloqueado</span>':''}${usuariosExtra.some(x=>x.id===u.id)?' <span class="badge" style="margin-left:4px;background:#E6F1FB;color:#0C447C">agregado</span>':''}</td>
           <td><span class="badge badge-${u.role==='admin'?'admin':'operador'}">${u.cargo}</span></td>
           <td><code style="font-size:12px;background:#f3f4f6;padding:2px 6px;border-radius:4px">${u.id}</code></td>
           <td><code style="font-size:12px;background:#f3f4f6;padding:2px 6px;border-radius:4px">${pass}</code></td>
           <td style="white-space:nowrap">
             <button class="btn btn-sm" onclick="editarPass('${u.id}','${u.name}')" title="Cambiar contraseña"><i class="ti ti-key"></i></button>
             ${u.id!=='franco' ? `<button class="btn btn-sm" style="${bloq?'color:#A32D2D;border-color:#A32D2D':''}" onclick="toggleBloqueo('${u.id}')" title="${bloq?'Desbloquear':'Bloquear'}"><i class="ti ti-${bloq?'lock-open':'ban'}"></i></button>` : ''}
+            ${usuariosExtra.some(x=>x.id===u.id) ? `<button class="btn btn-sm" style="color:#A32D2D;border-color:#A32D2D" onclick="eliminarUsuarioExtra('${u.id}','${u.name}')" title="Eliminar usuario"><i class="ti ti-trash"></i></button>` : ''}
           </td>
         </tr>`;
       }).join('')}
       </tbody></table></div></div>`;
   }
+}
+
+// ═══ Alta y baja de usuarios (se guardan en Firebase, compartidos con Stock Nochero) ═══
+function nuevoUsuarioModal(){
+  document.getElementById('modal').innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal" style="max-width:430px">
+        <h2><i class="ti ti-user-plus"></i> Agregar usuario</h2>
+        <p style="font-size:13px;color:#6b7280;margin-bottom:1rem">Se va a poder usar en esta app y en Stock Nochero.</p>
+        <label style="font-size:12px;font-weight:600;color:#374151">Nombre</label>
+        <input type="text" id="nu-nombre" placeholder="Ej: Bruno" style="margin-bottom:10px" oninput="sugerirIdUsuario()">
+        <label style="font-size:12px;font-weight:600;color:#374151">Usuario (para iniciar sesión)</label>
+        <input type="text" id="nu-id" placeholder="ej: bruno" style="margin-bottom:10px" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9]/g,'')">
+        <label style="font-size:12px;font-weight:600;color:#374151">Cargo</label>
+        <select id="nu-cargo" style="margin-bottom:10px">
+          <option value="Refuerzo">Refuerzo (puede hacer turnos seguidos)</option>
+          <option value="Jefe de Turno">Jefe de Turno</option>
+          <option value="Administrador">Administrador (acceso al panel)</option>
+        </select>
+        <label style="font-size:12px;font-weight:600;color:#374151">Contraseña</label>
+        <input type="text" id="nu-pass" placeholder="mínimo 3 caracteres" style="margin-bottom:4px" onkeydown="if(event.key==='Enter')guardarUsuarioNuevo()">
+        <div id="nu-msg" style="font-size:12.5px;color:#A32D2D;font-weight:600;min-height:18px"></div>
+        <div class="modal-btns">
+          <button class="btn" onclick="document.getElementById('modal').innerHTML=''">Cancelar</button>
+          <button class="btn btn-primary" onclick="guardarUsuarioNuevo()">Agregar</button>
+        </div>
+      </div>
+    </div>`;
+  setTimeout(()=>document.getElementById('nu-nombre')?.focus(),100);
+}
+function sugerirIdUsuario(){
+  const n=document.getElementById('nu-nombre'), i=document.getElementById('nu-id');
+  if(!n||!i||i.dataset.tocado) return;
+  i.value = n.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+}
+async function guardarUsuarioNuevo(){
+  const msg = document.getElementById('nu-msg');
+  const nombre = (document.getElementById('nu-nombre')?.value||'').trim();
+  const id = (document.getElementById('nu-id')?.value||'').trim().toLowerCase();
+  const cargo = document.getElementById('nu-cargo')?.value||'Refuerzo';
+  const pass = (document.getElementById('nu-pass')?.value||'').trim();
+  if(!nombre){ msg.textContent='Escribí el nombre'; return; }
+  if(!id){ msg.textContent='Escribí el usuario'; return; }
+  if(pass.length<3){ msg.textContent='La contraseña debe tener al menos 3 caracteres'; return; }
+  if(USERS.some(u=>u.id===id)){ msg.textContent=`Ya existe un usuario "${id}"`; return; }
+  const nuevo = {id, name:nombre, role: cargo==='Administrador'?'admin':'operador', cargo,
+                 pass, refuerzo: cargo==='Refuerzo'};
+  const extra = await fbLoad('usuariosExtra', FB_BASE_NOCHERO) || [];
+  if(extra.some(u=>u.id===id)){ msg.textContent=`Ya existe un usuario "${id}"`; return; }
+  extra.push(nuevo);
+  await fbSave('usuariosExtra', extra, FB_BASE_NOCHERO);
+  aplicarUsuarios(extra);
+  document.getElementById('modal').innerHTML='';
+  toast(`✓ ${nombre} agregado — ya puede entrar en ambas plataformas`,'success');
+  renderAdmContent();
+}
+function eliminarUsuarioExtra(uid, nombre){
+  document.getElementById('modal').innerHTML = `
+    <div class="modal-overlay"><div class="modal">
+      <h2 style="color:#A32D2D"><i class="ti ti-trash"></i> ¿Eliminar a ${nombre}?</h2>
+      <p>No va a poder iniciar sesión en ninguna de las dos plataformas. Los turnos que ya cargó se conservan.</p>
+      <div class="modal-btns">
+        <button class="btn" onclick="document.getElementById('modal').innerHTML=''">Cancelar</button>
+        <button class="btn btn-danger" onclick="confirmarEliminarUsuario('${uid}','${nombre}')">Eliminar</button>
+      </div>
+    </div></div>`;
+}
+async function confirmarEliminarUsuario(uid, nombre){
+  let extra = await fbLoad('usuariosExtra', FB_BASE_NOCHERO) || [];
+  extra = extra.filter(u=>u.id!==uid);
+  await fbSave('usuariosExtra', extra, FB_BASE_NOCHERO);
+  aplicarUsuarios(extra);
+  document.getElementById('modal').innerHTML='';
+  toast(`${nombre} eliminado`,'error');
+  renderAdmContent();
 }
 
 async function editarPass(uid, nombre){
