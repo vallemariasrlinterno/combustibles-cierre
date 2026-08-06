@@ -725,6 +725,121 @@ function renderAvisosPrecios(){
 function sumCuentaCorriente(){ return cuentaCorriente.reduce((s,r)=>s+(r.importe||0),0); }
 function syncCuentaCorriente(){ pagos.cuentaCorriente = sumCuentaCorriente(); }
 
+// ═══ Clientes: la app los aprende del historial y sugiere por semejanza ═══
+// Normaliza para comparar: mayúsculas, sin tildes, sin puntuación.
+function normalizarCliente(s){
+  return (s||'').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\./g,'')                    // S.A. -> SA, S.R.L. -> SRL (antes de tocar el resto)
+    .replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+}
+// Clave de comparación: además saca las formas societarias, que se escriben de mil maneras
+// (SA / S.A. / SRL...). Así "DON LUIS" y "DON LUIS S.A." se reconocen como el mismo.
+function claveCliente(s){
+  return normalizarCliente(s)
+    .replace(/\b(SA|SRL|SAS|SH|SCA|SACIF|CIA|HNOS|HNAS)\b/g,'')
+    .replace(/\s+/g,' ').trim();
+}
+// Lista aprendida: recorre todos los turnos cerrados + lo cargado en este turno.
+// El nombre que se muestra es la forma MÁS USADA de cada cliente.
+function clientesConocidos(){
+  const grupos = new Map(); // clave -> {formas:Map(nombre->usos), usos}
+  const sumar = (nombre)=>{
+    if(!nombre) return;
+    const k = claveCliente(nombre);
+    if(!k) return;
+    if(!grupos.has(k)) grupos.set(k, {formas:new Map(), usos:0});
+    const g = grupos.get(k);
+    const forma = normalizarCliente(nombre);
+    g.formas.set(forma, (g.formas.get(forma)||0)+1);
+    g.usos++;
+  };
+  Object.values(turnosCerrados||{}).forEach(c=>{
+    if(c && Array.isArray(c.cuentaCorriente)) c.cuentaCorriente.forEach(r=>{ if(r) sumar(r.cliente); });
+  });
+  (cuentaCorriente||[]).forEach(r=>{ if(r) sumar(r.cliente); });
+  const salida=[];
+  grupos.forEach((g,k)=>{
+    let mejor='', max=-1;
+    g.formas.forEach((n,forma)=>{ if(n>max){max=n;mejor=forma;} });
+    salida.push({clave:k, nombre:mejor, usos:g.usos});
+  });
+  return salida.sort((a,b)=>b.usos-a.usos);
+}
+// Distancia de edición (Levenshtein) para detectar errores de tipeo
+function distanciaTexto(a,b){
+  if(a===b) return 0;
+  if(!a.length) return b.length;
+  if(!b.length) return a.length;
+  let prev=Array.from({length:b.length+1},(_,i)=>i);
+  for(let i=1;i<=a.length;i++){
+    const fila=[i];
+    for(let j=1;j<=b.length;j++){
+      fila[j] = Math.min(prev[j]+1, fila[j-1]+1, prev[j-1]+(a[i-1]===b[j-1]?0:1));
+    }
+    prev=fila;
+  }
+  return prev[b.length];
+}
+// ¿Son el mismo cliente escrito distinto?
+// Vale por dos caminos: uno contiene al otro en palabras completas (PEREZ ⊂ PEREZ JOSE),
+// o son casi iguales salvo un par de letras (GONZALEZ / GONSALEZ).
+function parecidoCliente(a, b){
+  const ka=claveCliente(a), kb=claveCliente(b);
+  if(!ka||!kb) return 0;
+  if(ka===kb) return 1;
+  const ta=ka.split(' ').filter(Boolean), tb=kb.split(' ').filter(Boolean);
+  const setA=new Set(ta), setB=new Set(tb);
+  const contenido = ta.every(t=>setB.has(t)) || tb.every(t=>setA.has(t));
+  if(contenido) return 0.95;
+  const d=distanciaTexto(ka,kb), m=Math.max(ka.length,kb.length);
+  return m? 1 - d/m : 0;
+}
+// Devuelve el cliente conocido más parecido (sin ser idéntico), o null
+function sugerirCliente(texto){
+  const t=(texto||'').trim();
+  if(t.length<3) return null;
+  const k=claveCliente(t);
+  const lista=clientesConocidos();
+  if(lista.some(c=>c.clave===k)) return null; // ya coincide con uno conocido: nada que avisar
+  let mejor=null, score=0;
+  lista.forEach(c=>{
+    const s=parecidoCliente(t, c.nombre);
+    if(s>score){ score=s; mejor=c; }
+  });
+  return (mejor && score>=0.8) ? {...mejor, score} : null;
+}
+let ccAvisoIgnorado = ''; // si el empleado dice "no, es otro", no volvemos a insistir con ese texto
+function revisarClienteCC(){
+  const el=document.getElementById('cc-cliente');
+  const box=document.getElementById('cc-cliente-aviso');
+  if(!el||!box) return;
+  const txt=el.value.trim();
+  const sug = (normalizarCliente(txt)===ccAvisoIgnorado) ? null : sugerirCliente(txt);
+  if(!sug){ box.innerHTML=''; box.style.display='none'; return; }
+  box.style.display='block';
+  box.innerHTML = `<div style="background:#FFF7E6;border:1px solid #E9C46A;border-radius:8px;padding:8px 10px;margin-top:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span style="font-size:12.5px;color:#92400E">¿Es el mismo que <strong>${esc(sug.nombre)}</strong>? <span style="color:#a16207">(${sug.usos} carga${sug.usos!==1?'s':''} previa${sug.usos!==1?'s':''})</span></span>
+    <span style="display:flex;gap:6px;margin-left:auto">
+      <button type="button" class="btn btn-sm" style="border-color:#3B6D11;color:#27500A" onclick="usarClienteSugerido('${esc(sug.nombre).replace(/'/g,"\\'")}')">Sí, usar ese</button>
+      <button type="button" class="btn btn-sm" onclick="ignorarSugerenciaCliente()">No, es otro</button>
+    </span></div>`;
+}
+function usarClienteSugerido(nombre){
+  const el=document.getElementById('cc-cliente');
+  if(el){ el.value=nombre; ccClienteVal=nombre; }
+  ccAvisoIgnorado='';
+  const box=document.getElementById('cc-cliente-aviso');
+  if(box){ box.innerHTML=''; box.style.display='none'; }
+  const wrap=document.getElementById('cc-tipo-wrap');
+  if(wrap) wrap.style.display='block';
+}
+function ignorarSugerenciaCliente(){
+  const el=document.getElementById('cc-cliente');
+  ccAvisoIgnorado = normalizarCliente(el?el.value:'');
+  const box=document.getElementById('cc-cliente-aviso');
+  if(box){ box.innerHTML=''; box.style.display='none'; }
+}
+
 // ═══ Formulario de Cuenta Corriente en 3 pasos ═══
 // Paso 1 fecha+cliente -> Paso 2 tipo (combustible / nochero) -> Paso 3 los campos que correspondan.
 // Todo se muestra/oculta por DOM (sin re-render) para no perder el foco mientras se tipea.
@@ -734,6 +849,7 @@ function onClienteCC(){
   const wrap = document.getElementById('cc-tipo-wrap');
   if(wrap) wrap.style.display = ccClienteVal.trim() ? 'block' : 'none';
   if(!ccClienteVal.trim()) ocultarPanelesCC();
+  revisarClienteCC();
 }
 function ocultarPanelesCC(){
   ccTipo = null;
@@ -939,10 +1055,12 @@ function renderCuentaCorriente(cerrado){
     <!-- PASO 1: fecha y cliente -->
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
       <div style="min-width:150px"><label>Fecha</label><input type="date" id="cc-fecha" value="${T.fk}"></div>
-      <div style="flex:1;min-width:220px"><label>Cliente <span style="color:#A32D2D">*</span></label>
-        <input type="text" id="cc-cliente" placeholder="NOMBRE DEL CLIENTE" style="text-transform:uppercase"
+      <div style="flex:1;min-width:220px"><label>Cliente <span style="color:#A32D2D">*</span>${(()=>{const n=clientesConocidos().length;return n?` <span style="font-weight:400;color:#6b7280">(${n} conocido${n!==1?'s':''} — escribí para buscar)</span>`:'';})()}</label>
+        <input type="text" id="cc-cliente" list="cc-clientes-list" placeholder="NOMBRE DEL CLIENTE" style="text-transform:uppercase"
                value="${esc(ccClienteVal)}" autocomplete="off"
-               oninput="this.value=this.value.toUpperCase(); onClienteCC()"></div>
+               oninput="this.value=this.value.toUpperCase(); onClienteCC()">
+        <datalist id="cc-clientes-list">${clientesConocidos().map(c=>`<option value="${esc(c.nombre)}">${c.usos} carga${c.usos!==1?'s':''}</option>`).join('')}</datalist>
+        <div id="cc-cliente-aviso" style="display:none"></div></div>
     </div>
 
     <!-- PASO 2: qué le vendemos -->
