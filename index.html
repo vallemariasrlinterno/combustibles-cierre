@@ -725,26 +725,95 @@ function renderAvisosPrecios(){
 function sumCuentaCorriente(){ return cuentaCorriente.reduce((s,r)=>s+(r.importe||0),0); }
 function syncCuentaCorriente(){ pagos.cuentaCorriente = sumCuentaCorriente(); }
 
-// Mostrar/ocultar los sub-campos según el tipo de producto elegido en CC
-function onCambioProductoCC(v){
-  document.getElementById('cc-manual-wrap').style.display = v==='__manual__'?'flex':'none';
-  document.getElementById('cc-nochero-wrap').style.display = v==='__nochero__'?'flex':'none';
-  // Con producto del nochero, litros/importe los maneja cantidad×precio: los limpio y deshabilito
-  const cl=document.getElementById('cc-litros'), ci=document.getElementById('cc-importe');
-  const esNochero = v==='__nochero__';
-  if(cl){ cl.disabled=esNochero; if(esNochero) cl.value=''; }
-  if(ci){ ci.disabled=esNochero; if(esNochero) ci.value=''; }
-  if(esNochero && !catalogoNocheroCargado) cargarCatalogoNochero();
+// ═══ Formulario de Cuenta Corriente en 3 pasos ═══
+// Paso 1 fecha+cliente -> Paso 2 tipo (combustible / nochero) -> Paso 3 los campos que correspondan.
+// Todo se muestra/oculta por DOM (sin re-render) para no perder el foco mientras se tipea.
+function onClienteCC(){
+  const el = document.getElementById('cc-cliente');
+  ccClienteVal = el ? el.value : '';
+  const wrap = document.getElementById('cc-tipo-wrap');
+  if(wrap) wrap.style.display = ccClienteVal.trim() ? 'block' : 'none';
+  if(!ccClienteVal.trim()) ocultarPanelesCC();
+}
+function ocultarPanelesCC(){
+  ccTipo = null;
+  const c=document.getElementById('cc-panel-combustible'), n=document.getElementById('cc-panel-nochero');
+  if(c) c.style.display='none';
+  if(n) n.style.display='none';
+}
+function seleccionarTipoCC(tipo){
+  ccTipo = tipo;
+  const c=document.getElementById('cc-panel-combustible'), n=document.getElementById('cc-panel-nochero');
+  if(c) c.style.display = tipo==='combustible' ? 'block' : 'none';
+  if(n) n.style.display = tipo==='nochero' ? 'block' : 'none';
+  // resaltar la tarjeta elegida
+  renderResaltadoTipoCC();
+  if(tipo==='nochero' && !catalogoNocheroCargado) cargarCatalogoNochero();
+  setTimeout(()=>{
+    const foco = tipo==='combustible' ? 'cc-litros' : (ccManualAbierto?'cc-producto-manual':'cc-producto-nochero');
+    document.getElementById(foco)?.focus();
+  },60);
+}
+function renderResaltadoTipoCC(){
+  const wrap=document.getElementById('cc-tipo-wrap');
+  if(!wrap) return;
+  const btns=wrap.querySelectorAll('button');
+  if(btns[0]){ btns[0].style.borderColor = ccTipo==='combustible'?'#185FA5':'#d1d5db'; btns[0].style.background = ccTipo==='combustible'?'#E6F1FB':'#fff'; }
+  if(btns[1]){ btns[1].style.borderColor = ccTipo==='nochero'?'#3B6D11':'#d1d5db'; btns[1].style.background = ccTipo==='nochero'?'#EAF3DE':'#fff'; }
+}
+function toggleManualCC(abrir){
+  ccManualAbierto = !!abrir;
+  const n=document.getElementById('cc-nochero-normal'), m=document.getElementById('cc-nochero-manual');
+  if(n) n.style.display = abrir?'none':'block';
+  if(m) m.style.display = abrir?'block':'none';
+  setTimeout(()=>document.getElementById(abrir?'cc-producto-manual':'cc-producto-nochero')?.focus(),60);
+}
+// Combustible: litros <-> importe en vivo (escribo en el OTRO campo, nunca en el que se está tipeando)
+function calcCombustibleCC(origen){
+  const elL=document.getElementById('cc-litros'), elI=document.getElementById('cc-importe');
+  const sel=document.getElementById('cc-producto');
+  if(!elL||!elI||!sel) return;
+  const precio = precios[sel.value]||0;
+  if(precio<=0) return;
+  if(origen==='litros'){
+    const litros = parseLitrosValor(elL);
+    elI.value = (litros!=null && !isNaN(litros) && litros>0) ? formatMiles(Math.round(litros*precio)) : '';
+  } else {
+    const dig = elI.value.replace(/[^0-9]/g,'');
+    const importe = dig===''?null:parseInt(dig,10);
+    elL.value = (importe!=null && importe>0) ? (importe/precio).toFixed(2).replace('.',',') : '';
+  }
+}
+// Nochero: cantidad x precio en vivo
+function calcNocheroCC(){
+  const nom=(document.getElementById('cc-producto-nochero')?.value||'');
+  const dig=(document.getElementById('cc-cant-nochero')?.value||'').replace(/[^0-9]/g,'');
+  const cant=dig===''?0:parseInt(dig,10);
+  const precio=precioNochero(nom);
+  const el=document.getElementById('cc-total-nochero');
+  if(el) el.textContent='$'+((cant*precio)||0).toLocaleString('es-AR');
+}
+function calcManualCC(){
+  const dig=(document.getElementById('cc-cant-manual')?.value||'').replace(/[^0-9]/g,'');
+  const cant=dig===''?0:parseInt(dig,10);
+  const pd=(document.getElementById('cc-precio-manual')?.value||'').replace(/[^0-9]/g,'');
+  const precio=pd===''?0:parseInt(pd,10);
+  const el=document.getElementById('cc-total-manual');
+  if(el) el.textContent='$'+((cant*precio)||0).toLocaleString('es-AR');
 }
 function onNocheroSel(nombre){
   const pr = precioNochero(nombre);
   const v = document.getElementById('cc-precio-nochero-view');
-  if(v) v.value = pr>0 ? '$'+pr.toLocaleString('es-AR') : '(no encontrado)';
+  if(v) v.value = pr>0 ? '$'+pr.toLocaleString('es-AR') : (nombre.trim()?'(no está en la lista)':'—');
+  calcNocheroCC();
 }
 
 // ═══ Catálogo del Nochero (leído de la MISMA planilla Google Sheets que Stock Nochero) ═══
 const SHEET_ID_NOCHERO = '1kRZBJo5l51FuVvEsLR8Z_hJV-X2AKHMsW-L-N0NzNBc';
 const HOJAS_NOCHERO = ['Minimercado','Lubricantes','Gas + Hielo'];
+let ccTipo = null;               // null | 'combustible' | 'nochero'  (paso 2 del formulario)
+let ccManualAbierto = false;     // dentro de nochero: producto que no está en la lista
+let ccClienteVal = '';           // se conserva al agregar, para cargar varios ítems al mismo cliente
 let catalogoNochero = [];        // [{nombre, precio, categoria}]
 let catalogoNocheroCargado = false;
 let catalogoNocheroCargando = false;
@@ -779,7 +848,11 @@ async function cargarCatalogoNochero(){
     catalogoNocheroCargado = true;
     // Si el datalist ya está en pantalla, poblarlo
     const dl = document.getElementById('cc-nochero-list');
-    if(dl) dl.innerHTML = catalogoNochero.map(p=>`<option value="${esc(p.nombre)}">$${p.precio.toLocaleString('es-AR')} · ${esc(p.categoria)}</option>`).join('');
+    if(dl){
+      dl.innerHTML = catalogoNochero.map(p=>`<option value="${esc(p.nombre)}">$${p.precio.toLocaleString('es-AR')} · ${esc(p.categoria)}</option>`).join('');
+      const lbl = dl.parentElement?.querySelector('label');
+      if(lbl) lbl.innerHTML = `Producto <span style="font-weight:400;color:#6b7280">(${catalogoNochero.length} en la lista)</span>`;
+    }
   }catch(e){ /* silencioso: si falla, el empleado usa "Otro (manual)" */ }
   catalogoNocheroCargando = false;
 }
@@ -789,60 +862,62 @@ function precioNochero(nombre){
 }
 
 function agregarCuentaCorriente(){
-  const fecha = document.getElementById('cc-fecha').value || T.fk;
-  const cliente = document.getElementById('cc-cliente').value.trim().toUpperCase();
-  const producto = document.getElementById('cc-producto').value;
-  const litros0 = parseLitrosValor(document.getElementById('cc-litros'));
-  const importeDigitos = document.getElementById('cc-importe').value.replace(/[^0-9]/g,'');
-  let litros = litros0;
-  let importe = importeDigitos!==''? parseInt(importeDigitos,10) : null;
+  const fecha = document.getElementById('cc-fecha')?.value || T.fk;
+  const cliente = (document.getElementById('cc-cliente')?.value||'').trim().toUpperCase();
+  if(!fecha || !cliente){ toast('Completá la fecha y el cliente','error'); return; }
+  if(!ccTipo){ toast('Elegí si es combustible o producto del nochero','error'); return; }
 
-  if(!fecha || !cliente || !producto){
-    toast('Completá fecha, cliente y producto','error'); return;
-  }
-  // Los productos del nochero calculan litros e importe desde cantidad×precio (más abajo),
-  // así que la exigencia de "litros o importe" solo aplica al resto.
-  if(producto!=='__nochero__' && (litros==null||isNaN(litros)) && (importe==null||isNaN(importe))){
-    toast('Cargá los litros o el importe en pesos','error'); return;
-  }
-  let producto2 = producto, precio;
-  if(producto==='__nochero__'){
-    producto2 = (document.getElementById('cc-producto-nochero')?.value||'').trim();
-    if(!producto2){ toast('Elegí un producto del nochero','error'); return; }
-    precio = precioNochero(producto2);
-    if(precio<=0){ toast('Ese producto no está en la lista del nochero (o no tiene precio). Usá "Otro (manual)" si hace falta.','error'); return; }
-    const cantDig = (document.getElementById('cc-cant-nochero')?.value||'').replace(/[^0-9]/g,'');
+  let producto, litros, importe;
+
+  if(ccTipo==='combustible'){
+    producto = document.getElementById('cc-producto')?.value;
+    const precio = precios[producto]||0;
+    if(precio<=0){ toast(`${producto} todavía no tiene precio cargado — cargalo arriba primero`,'error'); return; }
+    litros = parseLitrosValor(document.getElementById('cc-litros'));
+    const dig = (document.getElementById('cc-importe')?.value||'').replace(/[^0-9]/g,'');
+    importe = dig===''?null:parseInt(dig,10);
+    if((litros==null||isNaN(litros)||litros<=0) && (importe==null||isNaN(importe)||importe<=0)){
+      toast('Cargá los litros o el importe en pesos','error'); return;
+    }
+    if(litros!=null && !isNaN(litros) && litros>0){ importe = Math.round(litros*precio); }
+    else { litros = importe/precio; }
+
+  } else { // nochero (de la lista o cargado a mano)
+    let precio, cantDig;
+    if(ccManualAbierto){
+      producto = (document.getElementById('cc-producto-manual')?.value||'').trim().toUpperCase();
+      const pd = (document.getElementById('cc-precio-manual')?.value||'').replace(/[^0-9]/g,'');
+      precio = pd===''?0:parseInt(pd,10);
+      cantDig = (document.getElementById('cc-cant-manual')?.value||'').replace(/[^0-9]/g,'');
+      if(!producto){ toast('Escribí el nombre del producto','error'); return; }
+      if(precio<=0){ toast('Cargá el precio unitario','error'); return; }
+    } else {
+      producto = (document.getElementById('cc-producto-nochero')?.value||'').trim();
+      if(!producto){ toast('Elegí un producto del nochero','error'); return; }
+      precio = precioNochero(producto);
+      if(precio<=0){ toast('Ese producto no está en la lista del nochero. Usá "Cargalo a mano" si hace falta.','error'); return; }
+      cantDig = (document.getElementById('cc-cant-nochero')?.value||'').replace(/[^0-9]/g,'');
+    }
     const cant = cantDig===''?0:parseInt(cantDig,10);
     if(cant<=0){ toast('Cargá la cantidad','error'); return; }
-    // Para productos del nochero, "litros" guarda la cantidad de unidades
-    litros = cant;
+    litros = cant;              // en productos del nochero, "litros" guarda las unidades
     importe = cant*precio;
-  } else if(producto==='__manual__'){
-    producto2 = (document.getElementById('cc-producto-manual')?.value||'').trim().toUpperCase();
-    const rawPm = (document.getElementById('cc-precio-manual')?.value||'').replace(/[^0-9]/g,'');
-    precio = rawPm===''?0:parseInt(rawPm,10);
-    if(!producto2){ toast('Escribí el nombre del producto manual','error'); return; }
-    if(precio<=0){ toast('Cargá el precio del producto manual','error'); return; }
-  } else {
-    precio = precios[producto]||0;
-    if(precio<=0){
-      toast(`${producto} todavía no tiene precio cargado — cargalo arriba primero`,'error'); return;
-    }
   }
-  // Obligación: el combustible. El otro valor (litros o importe) se calcula automático.
-  if(litros!=null && !isNaN(litros) && (importe==null||isNaN(importe))){
-    importe = litros*precio;
-  } else if(importe!=null && !isNaN(importe) && (litros==null||isNaN(litros))){
-    litros = importe/precio;
-  }
+
   if(litros==null||importe==null||isNaN(litros)||isNaN(importe)||litros<=0||importe<=0){
     toast('Revisá los valores cargados','error'); return;
   }
-  cuentaCorriente.push({id:'cc'+Date.now(), fecha, litros, cliente, producto: producto2, importe});
+  cuentaCorriente.push({id:'cc'+Date.now(), fecha, litros, cliente, producto, importe});
   syncCuentaCorriente();
   guardarDraft();
+  // Se conserva el cliente para poder cargarle otro ítem; se limpia el resto
+  ccClienteVal = cliente;
+  ccTipo = null;
+  ccManualAbierto = false;
   renderOperador();
+  toast(`✓ ${producto} agregado a la cuenta de ${cliente}`,'success');
 }
+
 function eliminarCuentaCorriente(id){
   cuentaCorriente = cuentaCorriente.filter(r=>r.id!==id);
   syncCuentaCorriente();
@@ -860,26 +935,106 @@ function renderCuentaCorriente(cerrado){
   </tr>`).join('');
   const total = sumCuentaCorriente();
   document.getElementById('cc-wrap').innerHTML = `
-    ${cerrado?'':`<p style="font-size:12px;color:#6b7280;margin-bottom:.5rem"><i class="ti ti-info-circle"></i> Cargá <strong>litros</strong> o <strong>importe</strong> — el que falte se calcula solo según el precio del combustible. <strong>El cliente es obligatorio.</strong></p>
-    <div class="cc-form">
-      <div><label>Fecha</label><input type="date" id="cc-fecha" value="${T.fk}"></div>
-      <div><label>Litros</label><input type="text" inputmode="decimal" id="cc-litros" placeholder="Ej: 21,82" oninput="onLitrosInput(this)" onblur="formatearLitrosBlur(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></div>
-      <div><label>Cliente <span style="color:#A32D2D">*</span></label><input type="text" id="cc-cliente" placeholder="NOMBRE (obligatorio)" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
-      <div><label>Producto</label><select id="cc-producto" onchange="onCambioProductoCC(this.value)">${PRODUCTOS.filter(p=>p!=='Kerosene').map(p=>`<option value="${p}">${p}</option>`).join('')}<option value="__nochero__">🛒 Producto del nochero</option><option value="__manual__">Otro (manual)</option></select></div>
-      <div id="cc-nochero-wrap" style="display:none;gap:10px;flex-wrap:wrap">
-        <div><label>Producto nochero</label>
-          <input type="text" id="cc-producto-nochero" list="cc-nochero-list" placeholder="Escribí para buscar..." autocomplete="off" oninput="onNocheroSel(this.value)">
-          <datalist id="cc-nochero-list"></datalist>
+    ${cerrado?'':`
+    <!-- PASO 1: fecha y cliente -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
+      <div style="min-width:150px"><label>Fecha</label><input type="date" id="cc-fecha" value="${T.fk}"></div>
+      <div style="flex:1;min-width:220px"><label>Cliente <span style="color:#A32D2D">*</span></label>
+        <input type="text" id="cc-cliente" placeholder="NOMBRE DEL CLIENTE" style="text-transform:uppercase"
+               value="${esc(ccClienteVal)}" autocomplete="off"
+               oninput="this.value=this.value.toUpperCase(); onClienteCC()"></div>
+    </div>
+
+    <!-- PASO 2: qué le vendemos -->
+    <div id="cc-tipo-wrap" style="display:${ccClienteVal.trim()?'block':'none'};margin-bottom:12px">
+      <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px">¿Qué le vendés?</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px">
+        <button type="button" onclick="seleccionarTipoCC('combustible')"
+          style="padding:14px;border-radius:10px;cursor:pointer;text-align:left;font-family:inherit;
+                 border:2px solid ${ccTipo==='combustible'?'#185FA5':'#d1d5db'};
+                 background:${ccTipo==='combustible'?'#E6F1FB':'#fff'}">
+          <div style="font-weight:800;font-size:15px;color:${ccTipo==='combustible'?'#0C447C':'#374151'}">⛽ Combustible</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:2px">Cargás litros o pesos</div>
+        </button>
+        <button type="button" onclick="seleccionarTipoCC('nochero')"
+          style="padding:14px;border-radius:10px;cursor:pointer;text-align:left;font-family:inherit;
+                 border:2px solid ${ccTipo==='nochero'?'#3B6D11':'#d1d5db'};
+                 background:${ccTipo==='nochero'?'#EAF3DE':'#fff'}">
+          <div style="font-weight:800;font-size:15px;color:${ccTipo==='nochero'?'#27500A':'#374151'}">🛒 Producto del nochero</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:2px">Cargás cantidad</div>
+        </button>
+      </div>
+    </div>
+
+    <!-- PASO 3a: COMBUSTIBLE -->
+    <div id="cc-panel-combustible" style="display:${ccTipo==='combustible'?'block':'none'};background:#E6F1FB;border:2px solid #185FA5;border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="font-size:12.5px;color:#0C447C;font-weight:600;margin-bottom:10px">Cargá <strong>litros</strong> o <strong>pesos</strong> — el otro se calcula solo con el precio del turno</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div style="min-width:170px"><label>Combustible</label>
+          <select id="cc-producto" onchange="calcCombustibleCC('litros')">
+            ${PRODUCTOS.filter(p=>p!=='Kerosene').map(p=>`<option value="${p}">${p}</option>`).join('')}
+          </select></div>
+        <div style="min-width:130px"><label>Litros</label>
+          <input type="text" inputmode="decimal" id="cc-litros" placeholder="Ej: 21,82" autocomplete="off"
+            oninput="onLitrosInput(this); calcCombustibleCC('litros')"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();agregarCuentaCorriente();}"></div>
+        <div style="font-size:18px;color:#9ca3af;padding-bottom:8px">↔</div>
+        <div style="min-width:130px"><label>Importe ($)</label>
+          <div class="precio-input-wrap"><span class="peso-sign">$</span>
+          <input type="text" inputmode="numeric" id="cc-importe" placeholder="Ej: 89.000" style="text-align:right" autocomplete="off"
+            oninput="onMilesInput(this); calcCombustibleCC('importe')"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();agregarCuentaCorriente();}"></div></div>
+        <div><button class="btn btn-primary" onclick="agregarCuentaCorriente()"><i class="ti ti-plus"></i> Agregar</button></div>
+      </div>
+    </div>
+
+    <!-- PASO 3b: PRODUCTO NOCHERO -->
+    <div id="cc-panel-nochero" style="display:${ccTipo==='nochero'?'block':'none'};background:#EAF3DE;border:2px solid #3B6D11;border-radius:10px;padding:14px;margin-bottom:12px">
+      <div id="cc-nochero-normal" style="display:${ccManualAbierto?'none':'block'}">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <div style="flex:1;min-width:220px"><label>Producto ${catalogoNocheroCargado?`<span style="font-weight:400;color:#6b7280">(${catalogoNochero.length} en la lista)</span>`:'<span style="font-weight:400;color:#9ca3af">cargando lista…</span>'}</label>
+            <input type="text" id="cc-producto-nochero" list="cc-nochero-list" placeholder="Escribí para buscar..." autocomplete="off"
+                   oninput="onNocheroSel(this.value)">
+            <datalist id="cc-nochero-list">${catalogoNochero.map(p=>`<option value="${esc(p.nombre)}">$${p.precio.toLocaleString('es-AR')} · ${esc(p.categoria)}</option>`).join('')}</datalist></div>
+          <div style="min-width:110px"><label>Cantidad</label>
+            <input type="text" inputmode="numeric" id="cc-cant-nochero" placeholder="Ej: 2" autocomplete="off"
+              oninput="this.value=this.value.replace(/[^0-9]/g,''); calcNocheroCC()"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();agregarCuentaCorriente();}"></div>
+          <div style="min-width:120px"><label>Precio unitario</label>
+            <input type="text" id="cc-precio-nochero-view" disabled placeholder="—" style="background:#f3f4f6;text-align:right"></div>
         </div>
-        <div><label>Cantidad</label><input type="text" inputmode="numeric" id="cc-cant-nochero" placeholder="Ej: 2" oninput="this.value=this.value.replace(/[^0-9]/g,'')" onkeydown="if(event.key==='Enter'){event.preventDefault();agregarCuentaCorriente();}"></div>
-        <div><label>Precio unitario</label><input type="text" id="cc-precio-nochero-view" disabled placeholder="—" style="background:#f3f4f6;text-align:right"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px dashed #3B6D11">
+          <button type="button" onclick="toggleManualCC(true)" style="background:none;border:none;padding:0;cursor:pointer;font-family:inherit;font-size:12.5px;color:#0C447C;text-decoration:underline">¿No está en la lista? Cargalo a mano</button>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="text-align:right"><div style="font-size:11px;color:#6b7280;font-weight:600">TOTAL</div>
+              <div id="cc-total-nochero" style="font-size:20px;font-weight:800;color:#27500A">$0</div></div>
+            <button class="btn btn-green" onclick="agregarCuentaCorriente()"><i class="ti ti-plus"></i> Agregar</button>
+          </div>
+        </div>
       </div>
-      <div id="cc-manual-wrap" style="display:none;gap:10px;flex-wrap:wrap">
-        <div><label>Producto manual</label><input type="text" id="cc-producto-manual" placeholder="Ej: LUBRICANTE HX7" oninput="this.value=this.value.toUpperCase()"></div>
-        <div><label>Precio manual ($)</label><div class="precio-input-wrap"><span class="peso-sign">$</span><input type="text" inputmode="numeric" id="cc-precio-manual" placeholder="0" style="text-align:right" oninput="onMilesInput(this)"></div></div>
+      <div id="cc-nochero-manual" style="display:${ccManualAbierto?'block':'none'}">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <div style="flex:1;min-width:190px"><label>Producto (a mano)</label>
+            <input type="text" id="cc-producto-manual" placeholder="Ej: LUBRICANTE HX7" autocomplete="off"
+                   oninput="this.value=this.value.toUpperCase()"></div>
+          <div style="min-width:110px"><label>Cantidad</label>
+            <input type="text" inputmode="numeric" id="cc-cant-manual" placeholder="Ej: 1" autocomplete="off"
+              oninput="this.value=this.value.replace(/[^0-9]/g,''); calcManualCC()"></div>
+          <div style="min-width:130px"><label>Precio unitario ($)</label>
+            <div class="precio-input-wrap"><span class="peso-sign">$</span>
+            <input type="text" inputmode="numeric" id="cc-precio-manual" placeholder="0" style="text-align:right" autocomplete="off"
+              oninput="onMilesInput(this); calcManualCC()"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();agregarCuentaCorriente();}"></div></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px dashed #3B6D11">
+          <button type="button" onclick="toggleManualCC(false)" style="background:none;border:none;padding:0;cursor:pointer;font-family:inherit;font-size:12.5px;color:#0C447C;text-decoration:underline">← Volver a la lista del nochero</button>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="text-align:right"><div style="font-size:11px;color:#6b7280;font-weight:600">TOTAL</div>
+              <div id="cc-total-manual" style="font-size:20px;font-weight:800;color:#27500A">$0</div></div>
+            <button class="btn btn-green" onclick="agregarCuentaCorriente()"><i class="ti ti-plus"></i> Agregar</button>
+          </div>
+        </div>
       </div>
-      <div><label>Importe ($)</label><input type="text" inputmode="numeric" id="cc-importe" placeholder="Ej: 89.000" oninput="onMilesInput(this)" onblur="if(this.value)this.value=formatMiles(parseInt(this.value,10))" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></div>
-      <div><button class="btn btn-primary btn-block" onclick="agregarCuentaCorriente()"><i class="ti ti-plus"></i> Agregar</button></div>
     </div>`}
     <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Litros</th><th>Cliente</th><th>Producto</th><th>Importe</th><th></th></tr></thead><tbody>
     ${filas || '<tr><td colspan="6" style="text-align:center;color:#9ca3af">Sin cargas todavía</td></tr>'}
